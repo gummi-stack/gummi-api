@@ -12,8 +12,8 @@ redis			= require('redis-url').connect()
 mongoFactory	= require 'mongo-connection-factory'
 ObjectID		= require('mongodb').ObjectID
 
-Igthorn 		= require 'lib/igthorn'
-Nginx			= require './lib/Nginx'
+Igthorn 		= require './lib/igthorn'
+Nginx			= require './lib/nginx'
 config			= require './config'
 
 mongoUrl = config.mongoUrl
