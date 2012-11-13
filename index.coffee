@@ -1,6 +1,8 @@
+prettyjson		= require 'prettyjson'
 async			= require 'async'
 colors			= require 'colors'
 express			= require 'express'
+expressdoc		= require './lib/express-doc'
 util			= require 'util'
 fs				= require 'fs'
 http			= require 'http'
@@ -17,6 +19,11 @@ Nginx			= require './lib/nginx'
 config			= require './config'
 
 mongoUrl = config.mongoUrl
+fs				= require 'fs'
+
+#restify = require('restify')
+#swagger = require('swagger-doc')
+#server = restify.createServer()
 
 
 ###
@@ -36,23 +43,29 @@ nginx = new Nginx
 
 app = express()
 
-app.post '/', (req, res)->
-	buffer = ''
-	req.on 'data', (data) ->
-		buffer += data
-	req.on 'end', () ->
 
-
+### 
+Testovaci metoda
+###
 app.get '/reloadrouter', (req, res) ->
 	nginx.reload (o) ->
 		res.json o
 
+###
+Get application logs 
+
+:app - application name
+:branch - branch name
+:tail - bool - enable live tailing
+
+###
 
 app.get '/apps/:app/:branch/logs', (req, res) ->
 	app = req.params.app
 	app = app + '.git' unless app.match /\.git/
 	branch = req.params.branch 
 	tail = req.query.tail
+
 	start = new Date().getTime() * 1000;
 	util.log util.inspect tail
 
@@ -104,6 +117,13 @@ app.get '/apps/:app/:branch/logs', (req, res) ->
 		else 
 			res.end()
 			
+### 
+List application processes
+
+:app - application name
+:branch - branch name
+
+###
 
 app.get '/apps/:app/:branch/ps', (req, res) ->
 	app = req.params.app
@@ -119,7 +139,13 @@ app.get '/apps/:app/:branch/ps', (req, res) ->
 				res.json results
 	
 	
+###
+Stop all processes
 
+:app - application name
+:branch - branch name
+
+###
 
 app.get '/apps/:app/:branch/ps/stop', (req, res) ->
 	app = req.params.app
@@ -155,8 +181,17 @@ app.get '/apps/:app/:branch/ps/stop', (req, res) ->
 									util.log util.inspect arguments
 							util.log util.inspect res
 
+
+
+app.use(express.static __dirname + '/doc')
+app.get '/doc.json', (req, res) ->
 	
+	res.header("Access-Control-Allow-Origin", "*")
+	res.json expressdoc fs.readFileSync(__filename) + ""
 	
+#return 
+
+
 
 findLatestBuild = (app, branch, done) ->
 	mongoFactory.db mongoUrl, (err, db) ->
@@ -205,6 +240,13 @@ startProcesses = (build, processes, rendezvous, done) ->
 	), (err) ->
 		done()
 
+###
+Start new process
+
+:app - application name
+:branch - branch
+
+###
 app.post '/apps/:app/:branch/ps', (req, res) ->
 	buffer = ''
 	req.on 'data', (data) ->
@@ -228,6 +270,13 @@ app.post '/apps/:app/:branch/ps', (req, res) ->
 
 			
 	
+###
+Restart all application processes
+
+:app - application name
+:branch - branch
+
+###
 
 app.get '/apps/:app/:branch/ps/restart', (req, res) ->
 	app = req.params.app
@@ -287,39 +336,6 @@ app.get '/apps/:app/:branch/ps/restart', (req, res) ->
 					
 
 
-app.get '/ps/start', (req, res) ->
-	lxc = new Lxc
-
-	lxc.on 'data', (data) ->
-		util.log data
-
-	lxc.on 'error', (data) ->
-		util.log 'ERR: ' + data
-
-	lxc.on 'exit', (code) ->
-		util.log 'EXIT: ' + code
-
-	lxc.setup dhcp.get(), (name) ->
-		approot = "#{lxc.root}app"
-		fs.mkdirSync approot
-
-		file = req.query.slug
-		env = JSON.parse req.query.env
-		cmd = req.query.cmd
-		console.log "tar -C #{approot}/ -xzf #{file}"
-		for key, val of env
-		    util.log key, val	
-		    process.env[key] = val	
-
-		process.env.FFF='joooooo'
-		exec "tar -C #{approot}/ -xzf #{file}", (error, stdout, stderr) ->
-			lxc.exec '/buildpacks/startup /app run ' + cmd, (exitCode) ->
-				lxc.dispose () ->
-			res.json
-				pid: lxc.process.pid
-				ip: dhcp.ip.join '.'
-				name: lxc.name
-
-app.listen 80
-util.log 'server listening on 80'
+app.listen config.port
+util.log "server listening on #{config.port}"
 

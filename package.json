@@ -10,6 +10,7 @@
 	"hiredis": "*",
 	"redis-url": "*",
 	"procfile": "*",
+	"coffee-script": "*",
 	"mongodb": "*",
 	"mongo-connection-factory":"git+ssh://git@gitlab.ccl:mongo-connection-factory.git",
 	"colors": "*"
