@@ -4,13 +4,14 @@ util			= require 'util'
 
 GLOBAL.config	= require './config'
 Drekmore		= require './lib/drekmore'
+redis			= require('redis-url').connect()
 
 
 require 'coffee-trace'
 dm = new Drekmore
 
 fn = util.inspect # colorized output :)
-util.inspect = (a, b, c) -> fn a, b, c, yes 
+util.inspect = (a, b, c) -> fn a, no, 5, yes 
 
 	
 
@@ -105,18 +106,44 @@ app.post '/apps/:app/:branch/ps', (req, res) ->
 				
 	
 ###
+Get applicatio scaling
+
+:app - application name
+:branch - branch
+###
+app.get '/apps/:app/:branch/ps/scale', (req, res) ->
+	app = sanitizeApp req.params.app
+	branch = req.params.branch 
+	
+	dm.getConfig app, branch, (config) ->
+		br = config.branches[branch]
+		if br
+			res.json br.scale
+		else
+			br {}
+		# util.log util.inspect done
+		# res.json done
+			
+###
 Scale
 
 :app - application name
 :branch - branch
 :scales - {"web": 2, "daemon": 4}
 ###
-app.get '/apps/:app/:branch/ps/scale', (req, res) ->
+app.post '/apps/:app/:branch/ps/scale', (req, res) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch 
+	buffer = ''
+	req.on 'data', (data) ->
+		buffer += data
+	req.on 'end', () ->
+		req.body = JSON.parse buffer
+
+		scales = req.body.scales 
 	
-	dm.scale app, branch, scales, (done) ->
-		res.json done
+		dm.setScaling app, branch, scales, (done) ->
+			res.json done
 			
 
 

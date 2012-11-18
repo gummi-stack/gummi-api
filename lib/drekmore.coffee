@@ -16,9 +16,9 @@ igthorn = new Igthorn
 nginx = new Nginx
 
 
-class Applications
-	constructor: ->
-		@db = mongoq config.mongoUrl
+# class Applications
+# 	constructor: ->
+# 		@db = mongoq config.mongoUrl
 	
 
 module.exports = class Drekmore
@@ -26,18 +26,90 @@ module.exports = class Drekmore
 		@db = mongoq config.mongoUrl
 		
 	
+	getConfig: (app, branch, done) =>
+		@db.collection('apps').find(name: app).toArray (err, results) =>
+			[application] = results
+			done application
+
+	setScaling: (app, branch, scales, done) =>
+		@db.collection('apps').find(name: app).toArray (err, results) =>
+			[application] = results
+			application.branches[branch] = {} unless application.branches[branch]
+			binfo = application.branches[branch]
+			binfo.scale = {} unless binfo.scale 
+			
+			for type, count of scales
+				binfo.scale[type] = count
+
+			util.log util.inspect binfo
+				
+			@db.collection('apps').save application, () =>
+				util.log 'save'
+				util.log util.inspect arguments
+				@scale app, branch, binfo.scale, done
+				
+				
+			
+			
+			
+
 	scale: (app, branch, scales, done) =>
 		#todo ulozit scales
-		@db.collection('apps').find(app: app).toArray (err, results) ->
-			[app] = results
-			done app
+		@db.collection('apps').find(name: app).toArray (err, results) =>
+			util.log util.inspect results	
+			[application] = results
+
+			binfo = application.branches[branch]
+			@ensureInstances app, branch, binfo.scale, done
+			 
 		
-		
-		
-		
-		
-		
-	# setuptoad
+	ensureInstances: (app, branch, scales, done) =>
+		# util.log util.inspect scales
+		@findInstances app, branch, (instances) =>
+			@findLatestBuild app, branch, (build) =>
+				processes = []
+				toKill = []
+				
+				# pripravim procesy pro sputeni
+				for procType, procCnt of scales
+					data = build.procfile[procType]
+					continue unless data
+					cmd = data.command
+					cmd += " " + data.options.join ' ' if data.options
+					for i in [0...procCnt]
+						processes.push {name: "#{procType}-#{i}", type: procType , cmd: cmd}
+						
+				for instance in instances
+					# odectu od nich jiz bezici
+					processes = processes.filter (current) ->
+						current.name isnt instance.opts.worker
+				
+					# ty co nemaj bezet 
+					[_, type, id] = instance.opts.worker.match /(.*)-(\d+)/
+					toKill.push instance unless scales[type] > id
+				
+				if processes.length
+					@startProcesses build, processes, no , (done) =>	
+						util.log util.inspect done
+						
+				
+				if toKill.length
+					@stopInstances toKill, (done) =>	
+						util.log util.inspect done
+					
+				
+				
+				done 
+					s: scales
+					n: processes
+					k: toKill
+					i: instances
+					b: build
+				
+				# @startProcesses build, processes, no , (done) =>	
+				# 	util.log util.inspect done
+					
+					
 	runProcessRendezvous: (app, branch, command, done) =>
 		@findLatestBuild app, branch, (build) =>
 			# todo co kdyz neni build
