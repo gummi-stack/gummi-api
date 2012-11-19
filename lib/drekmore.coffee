@@ -41,26 +41,19 @@ module.exports = class Drekmore
 			for type, count of scales
 				binfo.scale[type] = count
 
-			util.log util.inspect binfo
-				
 			@db.collection('apps').save application, () =>
-				util.log 'save'
-				util.log util.inspect arguments
-				@scale app, branch, binfo.scale, done
+				# @scale app, branch, binfo.scale, done
+				@ensureInstances app, branch, binfo.scale, done
 				
 				
-			
-			
-			
-
-	scale: (app, branch, scales, done) =>
-		#todo ulozit scales
-		@db.collection('apps').find(name: app).toArray (err, results) =>
-			util.log util.inspect results	
-			[application] = results
-
-			binfo = application.branches[branch]
-			@ensureInstances app, branch, binfo.scale, done
+	# todo zrusit
+	# scale: (app, branch, scales, done) =>
+	# 	@db.collection('apps').find(name: app).toArray (err, results) =>
+	# 		util.log util.inspect results	
+	# 		[application] = results
+	# 
+	# 		binfo = application.branches[branch]
+	# 		@ensureInstances app, branch, binfo.scale, done
 			 
 		
 	ensureInstances: (app, branch, scales, done) =>
@@ -79,6 +72,7 @@ module.exports = class Drekmore
 					for i in [0...procCnt]
 						processes.push {name: "#{procType}-#{i}", type: procType , cmd: cmd}
 						
+					
 				for instance in instances
 					# odectu od nich jiz bezici
 					processes = processes.filter (current) ->
@@ -86,25 +80,40 @@ module.exports = class Drekmore
 				
 					# ty co nemaj bezet 
 					[_, type, id] = instance.opts.worker.match /(.*)-(\d+)/
+					id = parseInt id
+					# console.log id, scales[type], scales[type] > id
 					toKill.push instance unless scales[type] > id
 				
-				if processes.length
-					@startProcesses build, processes, no , (done) =>	
-						util.log util.inspect done
-						
+				util.log util.inspect toKill
+				console.log 'xxx'
 				
-				if toKill.length
-					@stopInstances toKill, (done) =>	
-						util.log util.inspect done
+				
+				async.parallel 
+					started: (cb) =>
+						if processes.length
+							util.log util.inspect processes
+							@startProcesses build, processes, no , (done) =>	
+								util.log util.inspect done
+								cb null, done
+						else
+							cb null, {}
+					stopped: (cb) =>
+						if toKill.length
+							@stopInstances toKill, (done) =>	
+								util.log util.inspect done
+								cb null, done
+						else
+							cb null, {}
 					
+				, (err, result) =>
+					done result
 				
-				
-				done 
-					s: scales
-					n: processes
-					k: toKill
-					i: instances
-					b: build
+				# done 
+				# 	s: scales
+				# 	n: processes
+				# 	k: toKill
+				# 	i: instances
+				# 	b: build
 				
 				# @startProcesses build, processes, no , (done) =>	
 				# 	util.log util.inspect done
@@ -155,24 +164,37 @@ module.exports = class Drekmore
 		
 	stopInstances: (instances, done) =>
 		for instance in instances
-			o = 	
-				name: instance.dynoData.name
-				pid: instance.dynoData.pid
 			do(instance) =>
-				util.log util.inspect instance
-				igthorn.softKill o, (res) =>
-							
-					if res.status is 'ok'
-						
-						
+				o = 	
+					name: instance.dynoData?.name
+					pid: instance.dynoData?.pid
+				instance.state = 'stopping'
+				
+				@db.collection('instances').save instance, () =>
+					
+					# util.log util.inspect instance
+					if instance.status is 'failed'
 						@removeInstance instance, ->
-							util.log util.inspect arguments
-					util.log util.inspect res
+					else
+						if instance.dynoData  # byl spusten na stoupovi
+							igthorn.softKill o, (err, res) =>
+								return util.log 'Nepovedlo se zastavit process' if err		
+								# console.log 'rrrrrrrrrrrrrrrrrrrrrrrrrr'
+								util.log util.inspect err
+								util.log util.inspect res
+								if res.status is 'ok'
+									@removeInstance instance, ->
+										util.log util.inspect arguments
+								util.log util.inspect res
+						else # neprosel stoupou tak jen smazu 
+							@removeInstance instance, ->
+								util.log util.inspect arguments
+						
 	
 		# TODO je treba cekat na killy ?
 		#TODO routing delat a po smazani vsecho z monga
 		@updateRouting 'testing.git', 'master', ->
-			done()
+			done('TODO nemam info o tom co sem zastavil')
 	
 
 	startProcesses: (build, processes, rendezvous, done) =>
@@ -190,21 +212,28 @@ module.exports = class Drekmore
 				logApp: item.name
 				type: item.type
 				rendezvous: rendezvous
+
+
+			instance = 
+				buildId: build._id
+				app: build.app
+				branch: build.branch
+				opts: opts 
+				time: new Date
+
 			
-			igthorn.start opts, (r) =>
-						
+			igthorn.start opts, (err, r) =>
+				if err
+					instance.state = 'failed'
+					instance.err = err
+				else
+					instance.dynoData = r		
+					instance.state = 'running'
 				util.log util.inspect r
-				item.result = r
-				util.log util.inspect build
+				# item.result = r
+				# util.log util.inspect build
 						
-				o = 
-					dynoData: r
-					buildId: build._id
-					app: build.app
-					branch: build.branch
-					opts: opts 
-					time: new Date
-				@saveInstance o, (err, results) ->
+				@saveInstance instance, (err, results) ->
 					#todo handle error
 					instances.push results[0]
 					done()
@@ -220,8 +249,8 @@ module.exports = class Drekmore
 		# zabit stare
 		
 		@findInstances app, branch, (instances) =>
-			console.log 'XXXXXXXXXXXXXXXXXXXXXXXXXX'
-			console.log instances
+			# console.log 'XXXXXXXXXXXXXXXXXXXXXXXXXX'
+			# console.log instances
 			done instances
 			
 
@@ -229,6 +258,7 @@ module.exports = class Drekmore
 
 			for instance in instances
 				continue unless instance.opts.type is 'web'
+				continue unless instance.state is 'running'
 				nodes.push instance.dynoData
 		
 			

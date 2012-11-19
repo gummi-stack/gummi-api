@@ -4,18 +4,17 @@ http = require 'http'
 
 
 
-module.exports = class
+module.exports = class Igthorn
 	start: (data, done) ->
 		util.log "Volam start: #{data.slug}, #{data.cmd} #{data.name} #{data.worker}"
 		data.env = {GUMMI: 'BEAR'}
 		
-		@request '10.1.69.105', 81, '/ps/start', data, (res) ->
-			done res
-			
+		@request '10.1.69.105', 81, '/ps/start', data, done
 	
 	softKill: (data, done) ->
-		@request '10.1.69.105', 81, '/ps/kill', data, (res) ->
-			done res
+		util.log "Volam stop: "
+		util.log util.inspect data
+		@request '10.1.69.105', 81, '/ps/kill', data, done
 		
 		
 	request: (ip, port, url, data, done) ->
@@ -26,6 +25,7 @@ module.exports = class
 			path: url
 			method: 'POST'
 			headers:
+				'Accept': 'application/json'
 				'Content-Type': 'application/json; charset=utf-8'
 				'Content-Length': data.length
 		
@@ -36,9 +36,17 @@ module.exports = class
 			res.on 'data', (chunk) ->
 				buffer += chunk
 			res.on 'end', () ->
-				util.log "----- " + buffer
-				done JSON.parse buffer
-				
+				# util.log "----- " + buffer
+				data = JSON.parse buffer
+				# util.log data
+				if data.error
+					done data, null
+				else
+					done null, data
+		
+		req.on 'error', (err) ->
+			util.log err if err
+			done err	
 		req.write data
 		req.end()
 	
