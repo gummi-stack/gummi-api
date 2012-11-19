@@ -63,6 +63,24 @@ app.get '/apps/:app/:branch/ps/stop', (req, res) ->
 				message: 'Asi sem je zabil, ale nekontroloval jsem to'
 
 
+
+###
+Restart all processes
+
+:app - application name
+:branch - branch name
+###
+app.get '/apps/:app/:branch/ps/restart', (req, res) ->
+	app = sanitizeApp req.params.app
+	branch = req.params.branch 
+
+	dm.restart app, branch, (done) ->
+		res.json 
+			status: 'ok'
+			message: 'Naplanovan restart'
+
+
+
 ###
 Start new process
 

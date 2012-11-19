@@ -16,10 +16,6 @@ igthorn = new Igthorn
 nginx = new Nginx
 
 
-# class Applications
-# 	constructor: ->
-# 		@db = mongoq config.mongoUrl
-	
 
 module.exports = class Drekmore
 	constructor: ->
@@ -29,95 +25,106 @@ module.exports = class Drekmore
 	getConfig: (app, branch, done) =>
 		@db.collection('apps').find(name: app).toArray (err, results) =>
 			[application] = results
-			done application
 
-	setScaling: (app, branch, scales, done) =>
-		@db.collection('apps').find(name: app).toArray (err, results) =>
-			[application] = results
 			application.branches[branch] = {} unless application.branches[branch]
 			binfo = application.branches[branch]
 			binfo.scale = {} unless binfo.scale 
-			
+
+			done application
+
+	setScaling: (app, branch, scales, done) =>
+		@getConfig app, branch, (application) =>
+			binfo = application.branches[branch]
+
 			for type, count of scales
 				binfo.scale[type] = count
 
 			@db.collection('apps').save application, () =>
 				# @scale app, branch, binfo.scale, done
-				@ensureInstances app, branch, binfo.scale, done
+				@ensureInstances app, branch, done
 				
-				
-	# todo zrusit
-	# scale: (app, branch, scales, done) =>
-	# 	@db.collection('apps').find(name: app).toArray (err, results) =>
-	# 		util.log util.inspect results	
-	# 		[application] = results
-	# 
-	# 		binfo = application.branches[branch]
-	# 		@ensureInstances app, branch, binfo.scale, done
+	restart: (app, branch, done) =>
+		@findInstances app, branch, (instances) =>
+			instancesToDepose = []
+			
+			for instance in instances
+
+				if instance.state is 'running'
+					instance.state = 'deposing'
+					instancesToDepose.push instance
+		
+			async.forEach instancesToDepose, ((item, queryDone) =>
+				@db.collection('instances').save item, queryDone
+			), (err) =>
+				# vsechny instance jsou oznaceny jako deposed
+				# necham nastartovat nove procesy
+				@ensureInstances app, branch, done
 			 
 		
-	ensureInstances: (app, branch, scales, done) =>
-		# util.log util.inspect scales
-		@findInstances app, branch, (instances) =>
-			@findLatestBuild app, branch, (build) =>
-				processes = []
-				toKill = []
+	ensureInstances: (app, branch, done) =>
+		@getConfig app, branch, (application) =>
+			binfo = application.branches[branch]
+			scales = binfo.scale
+			
+			@findInstances app, branch, (instances) =>
+				@findLatestBuild app, branch, (build) =>
+					toStart = []
+					toKill = []
 				
-				# pripravim procesy pro sputeni
-				for procType, procCnt of scales
-					data = build.procfile[procType]
-					continue unless data
-					cmd = data.command
-					cmd += " " + data.options.join ' ' if data.options
-					for i in [0...procCnt]
-						processes.push {name: "#{procType}-#{i}", type: procType , cmd: cmd}
+					# pripravim procesy pro sputeni
+					for procType, procCnt of scales
+						data = build.procfile[procType]
+						continue unless data
+						cmd = data.command
+						cmd += " " + data.options.join ' ' if data.options
+						for i in [0...procCnt]
+							toStart.push {name: "#{procType}-#{i}", type: procType , cmd: cmd}
 						
+					for instance in instances
+						# odectu od nich jiz bezici
+						toStart = toStart.filter (current) =>
+							if current.name isnt instance.opts.worker
+								return yes
+							else if instance.state is 'deposing'
+								return yes
+							else if instance.state is 'failed'
+								@removeInstance instance
+								return yes
+							return no
+				
+						# ty co nemaj bezet 
+						[_, type, id] = instance.opts.worker.match /(.*)-(\d+)/
+						id = parseInt id
+						unless scales[type] > id
+							toKill.push instance 
+						else if instance.state is 'deposing' 
+							for instance2 in instances
+								# and existuje running nahrada
+								if instance2.opts.worker is instance.opts.worker and instance2.state is 'running'
+									toKill.push instance
+				
+				
+					async.parallel 
+						started: (cb) =>
+							if toStart.length
+								util.log util.inspect toStart
+								@startProcesses build, toStart, no , (done) =>	
+									util.log util.inspect done
+									cb null, done
+							else
+								cb null, {}
+						stopped: (cb) =>
+							if toKill.length
+								@stopInstances toKill, (done) =>	
+									util.log util.inspect done
+									cb null, done
+							else
+								cb null, {}
 					
-				for instance in instances
-					# odectu od nich jiz bezici
-					processes = processes.filter (current) ->
-						current.name isnt instance.opts.worker
-				
-					# ty co nemaj bezet 
-					[_, type, id] = instance.opts.worker.match /(.*)-(\d+)/
-					id = parseInt id
-					# console.log id, scales[type], scales[type] > id
-					toKill.push instance unless scales[type] > id
-				
-				util.log util.inspect toKill
-				console.log 'xxx'
-				
-				
-				async.parallel 
-					started: (cb) =>
-						if processes.length
-							util.log util.inspect processes
-							@startProcesses build, processes, no , (done) =>	
-								util.log util.inspect done
-								cb null, done
-						else
-							cb null, {}
-					stopped: (cb) =>
-						if toKill.length
-							@stopInstances toKill, (done) =>	
-								util.log util.inspect done
-								cb null, done
-						else
-							cb null, {}
-					
-				, (err, result) =>
-					done result
-				
-				# done 
-				# 	s: scales
-				# 	n: processes
-				# 	k: toKill
-				# 	i: instances
-				# 	b: build
-				
-				# @startProcesses build, processes, no , (done) =>	
-				# 	util.log util.inspect done
-					
+					, (err, result) =>
+						@updateRouting app, branch, () ->
+							done result
+	
 					
 	runProcessRendezvous: (app, branch, command, done) =>
 		@findLatestBuild app, branch, (build) =>
@@ -260,45 +267,36 @@ module.exports = class Drekmore
 				continue unless instance.opts.type is 'web'
 				continue unless instance.state is 'running'
 				nodes.push instance.dynoData
-		
-			
-			
-			# nodes = []
-			# for state in processes
-			# 	nodes.push
-			# 		ip: state.result.ip
-			# 		port: 5000
-			# 	
+
 			nginx.updateUpstream app, branch, nodes
 			nginx.reload (o) ->
 				done o
-			# 		
-			# 		
-		
-	restartProcesses: (app, branch, done) =>
-		@findLatestBuild app, branch, (build) =>
-			processes = []
-			results = []
-			## nastartovat nove procesy podle skalovaci tabulky a procfile
-			@findInstances app, branch, (instances) =>
-				util.log 'xxxxIIIIII'
-				util.log util.inspect instances	
-				for proc, data of build.procfile
-					cmd = data.command
-					cmd += " " + data.options.join ' ' if data.options
-					## todo brat v potaz skalovani a pridelovani spravneho cisla
-					## TODO pouze test
-					for i in [1..2]
-						processes.push {name: "#{proc}-#{i}", type: proc , cmd: cmd}
 
-				@startProcesses build, processes, no, (newInstances) =>
-					build.out = processes 
-					
-					@updateRouting app, branch, () =>
-						done 
-					
-					
-					
+		
+	# restartProcesses: (app, branch, done) =>
+	# 	@findLatestBuild app, branch, (build) =>
+	# 		processes = []
+	# 		results = []
+	# 		## nastartovat nove procesy podle skalovaci tabulky a procfile
+	# 		@findInstances app, branch, (instances) =>
+	# 			util.log 'xxxxIIIIII'
+	# 			util.log util.inspect instances	
+	# 			for proc, data of build.procfile
+	# 				cmd = data.command
+	# 				cmd += " " + data.options.join ' ' if data.options
+	# 				## todo brat v potaz skalovani a pridelovani spravneho cisla
+	# 				## TODO pouze test
+	# 				for i in [1..2]
+	# 					processes.push {name: "#{proc}-#{i}", type: proc , cmd: cmd}
+	# 
+	# 			@startProcesses build, processes, no, (newInstances) =>
+	# 				build.out = processes 
+	# 				
+	# 				@updateRouting app, branch, () =>
+	# 					done 
+	# 				
+	# 				
+	# 				
 					
 						
 					## soft kill starejch
