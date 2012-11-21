@@ -7,27 +7,40 @@ http = require 'http'
 module.exports = class Igthorn
 	start: (data, done) ->
 		util.log "Volam start: #{data.slug}, #{data.cmd} #{data.name} #{data.worker}"
-		data.env = {GUMMI: 'BEAR'}
+		data.env = {} unless data.env
+		data.env.GUMMI = 'BEAR'
 		
-		@request '10.1.69.105', 81, '/ps/start', data, done
+		@request 'POST', '10.1.69.105', 81, '/ps/start', data, done
+
+	status: (done) ->
+		@request 'GET', '10.1.69.105', 81, '/ps/status', "", done
 	
+
 	softKill: (data, done) ->
 		util.log "Volam stop: "
 		util.log util.inspect data
-		@request '10.1.69.105', 81, '/ps/kill', data, done
+		@request 'POST', '10.1.69.105', 81, '/ps/kill', data, done
 		
 		
-	request: (ip, port, url, data, done) ->
-		data = JSON.stringify data
+	request: (method, ip, port, url, data = "", done) ->
+		length = 0
+		if method is 'POST'
+			data = JSON.stringify data
+			headers = 
+				'Accept': 'application/json'
+				'Content-Type': 'application/json; charset=utf-8'
+				'Content-Length': data.length
+
+		else 
+			headers = 
+				'Accept': 'application/json'
+				
 		opts = 
 			host: ip
 			port: 81
 			path: url
-			method: 'POST'
-			headers:
-				'Accept': 'application/json'
-				'Content-Type': 'application/json; charset=utf-8'
-				'Content-Length': data.length
+			method: method
+			headers: headers
 		
 		req = http.request opts, (res) =>
 			res.setEncoding 'utf8' 
@@ -47,6 +60,7 @@ module.exports = class Igthorn
 		req.on 'error', (err) ->
 			util.log err if err
 			done err	
-		req.write data
+		if method is 'POST'
+			req.write data
 		req.end()
 	

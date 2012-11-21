@@ -56,11 +56,10 @@ app.get '/apps/:app/:branch/ps/stop', (req, res) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch 
 
-	dm.findInstances app, branch, (instances) ->
-		dm.stopInstances instances, () ->
-			res.json 
-				status: 'ok'
-				message: 'Asi sem je zabil, ale nekontroloval jsem to'
+	dm.stopApplication app, branch, () ->
+	res.json 
+		status: 'ok'
+		message: 'Asi sem je zabil, ale nekontroloval jsem to'
 
 
 
@@ -99,7 +98,9 @@ app.post '/apps/:app/:branch/ps', (req, res) ->
 		command = req.body.command
 
 		dm.runProcessRendezvous app, branch, command, (process) ->
-			res.json rendezvousURI: process.result.rendezvousURI
+			util.log 'xxxxxxxxxxxxx'
+			util.log util.inspect process
+			res.json process
 			
 		
 ###
@@ -164,6 +165,15 @@ app.post '/apps/:app/:branch/ps/scale', (req, res) ->
 			res.json done
 			
 
+
+###
+List all applications
+
+###
+app.get '/apps/', (req, res) ->
+	dm.listApps (applications) ->
+			res.json applications
+	
 
 ###
 Get application logs 

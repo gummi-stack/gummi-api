@@ -16,16 +16,79 @@ igthorn = new Igthorn
 nginx = new Nginx
 
 
+class ToadwartPool
+	constructor: ->
+		@toadwarts = []
+		
+	
+	getPs: (done) ->
+		igthorn.status (err, status) ->
+			if err
+				return util.log 'Stoupa asi down'
+				
+			done status
+			# console.log 'xxx'
+			# util.log util.inspect status
+			
+	
+		
+		
+		
+	
+
 
 module.exports = class Drekmore
 	constructor: ->
 		@db = mongoq config.mongoUrl
 		
+		setInterval @checkStatus, 2000
+		
+		
+		@tp = new ToadwartPool
+		
 	
+	matchPsTable: (status, done) =>
+		toadwartId = status.id
+		
+		@db.collection('instances').find
+			'dynoData.toadwartId': toadwartId
+		.toArray (err, instances) =>
+			# zjistim upladle procesy
+			instances = instances.filter (instance) =>
+				for pid, process of status.processes
+					return no if process.uuid is instance.dynoData.uuid
+				yes
+			
+			@removeInstance instance for instance in instances
+			
+			done()
+		
+	
+	checkStatus: () =>
+		# util.log 'check...'
+
+		@listApps (applications) =>
+			for application in applications
+				# util.log util.inspect application
+				for branch, data of application.branches
+					@ensureInstances application.name, branch, () ->
+						# util.log util.inspect arguments
+			
+		
+		@tp.getPs (status) =>
+			@matchPsTable status, () =>
+				# console.log 'Check done'
+		
+	
+	listApps: (done) =>
+		@db.collection('apps').find().toArray (err, results) =>
+			done results
+		
 	getConfig: (app, branch, done) =>
 		@db.collection('apps').find(name: app).toArray (err, results) =>
 			[application] = results
 
+			application.branches = {} unless application.branches
 			application.branches[branch] = {} unless application.branches[branch]
 			binfo = application.branches[branch]
 			binfo.scale = {} unless binfo.scale 
@@ -44,21 +107,26 @@ module.exports = class Drekmore
 				@ensureInstances app, branch, done
 				
 	restart: (app, branch, done) =>
-		@findInstances app, branch, (instances) =>
-			instancesToDepose = []
-			
-			for instance in instances
-
-				if instance.state is 'running'
-					instance.state = 'deposing'
-					instancesToDepose.push instance
+		@getConfig app, branch, (application) =>
+			application.branches[branch].state = 'running'
+			@db.collection('apps').save application, () =>
+				# @ensureInstances app, branch, done
 		
-			async.forEach instancesToDepose, ((item, queryDone) =>
-				@db.collection('instances').save item, queryDone
-			), (err) =>
-				# vsechny instance jsou oznaceny jako deposed
-				# necham nastartovat nove procesy
-				@ensureInstances app, branch, done
+				@findInstances app, branch, (instances) =>
+					instancesToDepose = []
+							
+					for instance in instances
+				
+						if instance.state is 'running'
+							instance.state = 'deposing'
+							instancesToDepose.push instance
+						
+					async.forEach instancesToDepose, ((item, queryDone) =>
+						@db.collection('instances').save item, queryDone
+					), (err) =>
+						# vsechny instance jsou oznaceny jako deposed
+						# necham nastartovat nove procesy
+						@ensureInstances app, branch, done
 			 
 		
 	ensureInstances: (app, branch, done) =>
@@ -70,15 +138,20 @@ module.exports = class Drekmore
 				@findLatestBuild app, branch, (build) =>
 					toStart = []
 					toKill = []
-				
-					# pripravim procesy pro sputeni
-					for procType, procCnt of scales
-						data = build.procfile[procType]
-						continue unless data
-						cmd = data.command
-						cmd += " " + data.options.join ' ' if data.options
-						for i in [0...procCnt]
-							toStart.push {name: "#{procType}-#{i}", type: procType , cmd: cmd}
+					
+					unless binfo.state is 'stopped'
+						# pripravim procesy pro sputeni
+						for procType, procCnt of scales
+							data = build.procfile[procType]
+							continue unless data
+							cmd = data.command
+							cmd += " " + data.options.join ' ' if data.options
+							for i in [0...procCnt]
+								toStart.push
+									name: "#{procType}-#{i}"
+									type: procType
+									cmd: cmd
+									env: application.env  # todo pripadne opadtchovat branch konfiguraci
 						
 					for instance in instances
 						# odectu od nich jiz bezici
@@ -93,8 +166,11 @@ module.exports = class Drekmore
 							return no
 				
 						# ty co nemaj bezet 
+						# todo opravit skalovani kdyz bash
 						[_, type, id] = instance.opts.worker.match /(.*)-(\d+)/
 						id = parseInt id
+						if type is 'run'  # ignore
+							continue
 						unless scales[type] > id
 							toKill.push instance 
 						else if instance.state is 'deposing' 
@@ -127,18 +203,29 @@ module.exports = class Drekmore
 	
 					
 	runProcessRendezvous: (app, branch, command, done) =>
-		@findLatestBuild app, branch, (build) =>
-			# todo co kdyz neni build
-			util.log app, branch
-			util.log util.inspect build
-			process = 
-				name: "run-X"
-				type: "run"
-				cmd: command
+		@getConfig app, branch, (application) =>
+		
+			@findInstances app, branch, (instances) =>
+				running = []
+				for instance in instances
+					continue unless instance.opts.type is 'run'  # todo hloupe cislovani
+					running.push instance.opts.worker
+
+				@findLatestBuild app, branch, (build) =>
+					# todo co kdyz neni build
+					util.log app, branch
+					util.log util.inspect build
+					process = 
+						name: "run-" + running.length
+						type: "run"
+						cmd: command
+						env: application.env # todo pripadne opatchovat branchi
 			
-			@startProcesses build, [process], yes, () ->
-				util.log util.inspect process
-				done process # rendezvousURI: process.result.rendezvousURI
+					@startProcesses build, [process], yes, (results) ->
+						[result] = results
+						# process.result = result.dynoData.rendezvousURI
+						# util.log util.inspect process
+						done rendezvousURI: result.dynoData.rendezvousURI
 
 		
 	findInstances: (app, branch, done) ->
@@ -168,7 +255,15 @@ module.exports = class Drekmore
 		util.log util.inspect q
 		@db.collection('instances').remove q, done
 		
+	
+	stopApplication: (app, branch) =>
+		@getConfig app, branch, (application) =>
+			application.branches[branch].state = 'stopped'
+			@db.collection('apps').save application, () =>
+				@findInstances app, branch, (instances) =>
+					@stopInstances instances, () =>
 		
+			
 	stopInstances: (instances, done) =>
 		for instance in instances
 			do(instance) =>
@@ -209,6 +304,7 @@ module.exports = class Drekmore
 		
 		instances = []
 		
+		
 		async.forEach processes, ((item, done) =>
 			opts = 
 				slug: build.slug
@@ -219,6 +315,7 @@ module.exports = class Drekmore
 				logApp: item.name
 				type: item.type
 				rendezvous: rendezvous
+				env: item.env
 
 
 			instance = 
@@ -228,7 +325,7 @@ module.exports = class Drekmore
 				opts: opts 
 				time: new Date
 
-			
+				
 			igthorn.start opts, (err, r) =>
 				if err
 					instance.state = 'failed'
