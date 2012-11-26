@@ -7,6 +7,7 @@ http = require 'http'
 module.exports = class Igthorn
 	start: (data, done) ->
 		util.log "Volam start: #{data.slug}, #{data.cmd} #{data.name} #{data.worker}"
+		util.log util.inspect data.userEnv
 		data.env = {} unless data.env
 		data.env.GUMMI = 'BEAR'
 		
@@ -64,3 +65,35 @@ module.exports = class Igthorn
 			req.write data
 		req.end()
 	
+	
+	git: (data, done) ->
+		method = 'POST'
+		ip = '10.1.69.105'
+		port = 81
+		url = '/git/build'
+		
+		data = JSON.stringify data
+		headers = 
+			'Accept': 'application/json'
+			'Content-Type': 'application/json; charset=utf-8'
+			'Content-Length': data.length
+
+				
+		opts = 
+			host: ip
+			port: 81
+			path: url
+			method: method
+			headers: headers
+		
+		req = http.request opts, (res) =>
+			res.setEncoding 'utf8' 
+			return done(res)
+
+	
+		req.on 'error', (err) ->
+			util.log err if err
+
+		req.write data
+		req.end()
+		

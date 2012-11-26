@@ -5,7 +5,7 @@ util			= require 'util'
 GLOBAL.config	= require './config'
 Drekmore		= require './lib/drekmore'
 redis			= require('redis-url').connect()
-
+tokenParser		= require './lib/tokenParser'
 
 require 'coffee-trace'
 dm = new Drekmore
@@ -16,10 +16,14 @@ util.inspect = (a, b, c) -> fn a, no, 5, yes
 	
 
 app = express()
+app.use express.bodyParser()
+
 expressSwaggerDoc = require 'express-swagger-doc'
 app.use expressSwaggerDoc(__filename, '/docs')
-
 app.use express.static __dirname + "/public"	
+app.use app.router
+app.use express.errorHandler()	
+app.use tokenParser	
 
 sanitizeApp = (app) -> 
 	app += '.git' unless app.match /\.git/
@@ -90,38 +94,12 @@ app.post '/apps/:app/:branch/ps', (req, res) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch 
 
-	buffer = ''
-	req.on 'data', (data) ->
-		buffer += data
-	req.on 'end', () ->
-		req.body = JSON.parse buffer
-		command = req.body.command
+	command = req.body.command
+	userEnv = req.body.env
 
-		dm.runProcessRendezvous app, branch, command, (process) ->
-			util.log 'xxxxxxxxxxxxx'
-			util.log util.inspect process
-			res.json process
+	dm.runProcessRendezvous app, branch, command, userEnv, (process) ->
+		res.json process
 			
-		
-###
-Start new process
-
-:app - application name
-:branch - branch
-###
-app.post '/apps/:app/:branch/ps', (req, res) ->
-	app = sanitizeApp req.params.app
-	branch = req.params.branch 
-
-	buffer = ''
-	req.on 'data', (data) ->
-		buffer += data
-	req.on 'end', () ->
-		req.body = JSON.parse buffer
-		command = req.body.command
-
-		dm.runProcessRendezvous app, branch, command, (process) ->
-			res.json rendezvousURI: process.result.rendezvousURI
 				
 	
 ###
@@ -136,12 +114,8 @@ app.get '/apps/:app/:branch/ps/scale', (req, res) ->
 	
 	dm.getConfig app, branch, (config) ->
 		br = config.branches[branch]
-		if br
-			res.json br.scale
-		else
-			br {}
-		# util.log util.inspect done
-		# res.json done
+		res.json br.scale
+
 			
 ###
 Scale
@@ -153,17 +127,48 @@ Scale
 app.post '/apps/:app/:branch/ps/scale', (req, res) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch 
-	buffer = ''
-	req.on 'data', (data) ->
-		buffer += data
-	req.on 'end', () ->
-		req.body = JSON.parse buffer
 
-		scales = req.body.scales 
+	req.body = JSON.parse buffer
+
+	scales = req.body.scales 
 	
-		dm.setScaling app, branch, scales, (done) ->
-			res.json done
-			
+	dm.setScaling app, branch, scales, (done) ->
+		res.json done
+
+
+app.all '/git/:repo/*', (req, res, next) ->
+	return next 'Unauthorized' if req.token isnt 'cM7I84LFT9s29u0tnxrvZaMze677ZE60'
+	next()
+
+
+###
+Callback url for toadwart on successful build
+Private! toadwart only
+###
+app.post '/git/:repo/done', (req, res) ->
+	p = req.params
+	b = req.body
+
+	dm.saveBuild b, (data) ->
+		data.status = 'ok'
+		res.json data
+
+
+###
+Build revision from git
+Private! githook only
+###
+app.get '/git/:repo/:branch/:rev', (req, res) ->
+	p = req.params
+	build = dm.buildStream p.repo, p.branch, p.rev
+	
+	build.on 'data', (data) ->
+		res.write data
+
+	build.on 'end', (exitCode) ->
+		res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_#{exitCode}\n"
+
+	build.run()
 
 
 ###

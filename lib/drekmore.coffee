@@ -1,7 +1,8 @@
 async			= require 'async'
 fs				= require 'fs'
 redis			= require('redis-url').connect()
-mongoq			= require("mongoq");
+mongoq			= require("mongoq")
+EventEmitter	= require('events').EventEmitter
 # mongoFactory	= require 'mongo-connection-factory'
 # ObjectID		= require('mongodb').ObjectID
 fs				= require 'fs'
@@ -27,15 +28,6 @@ class ToadwartPool
 				return util.log 'Stoupa asi down'
 				
 			done status
-			# console.log 'xxx'
-			# util.log util.inspect status
-			
-	
-		
-		
-		
-	
-
 
 module.exports = class Drekmore
 	constructor: ->
@@ -92,6 +84,7 @@ module.exports = class Drekmore
 			application.branches[branch] = {} unless application.branches[branch]
 			binfo = application.branches[branch]
 			binfo.scale = {} unless binfo.scale 
+			binfo.lastVersion ?= 0
 
 			done application
 
@@ -202,7 +195,7 @@ module.exports = class Drekmore
 							done result
 	
 					
-	runProcessRendezvous: (app, branch, command, done) =>
+	runProcessRendezvous: (app, branch, command, userEnv, done) =>
 		@getConfig app, branch, (application) =>
 		
 			@findInstances app, branch, (instances) =>
@@ -220,7 +213,8 @@ module.exports = class Drekmore
 						type: "run"
 						cmd: command
 						env: application.env # todo pripadne opatchovat branchi
-			
+						userEnv: userEnv 
+						
 					@startProcesses build, [process], yes, (results) ->
 						[result] = results
 						# process.result = result.dynoData.rendezvousURI
@@ -316,6 +310,7 @@ module.exports = class Drekmore
 				type: item.type
 				rendezvous: rendezvous
 				env: item.env
+				userEnv: item.userEnv
 
 
 			instance = 
@@ -369,36 +364,31 @@ module.exports = class Drekmore
 			nginx.reload (o) ->
 				done o
 
+
+	buildStream: (repo, branch, rev) =>
+		em = new EventEmitter
+		em.run = () ->
+			p = 
+				repo: repo
+				branch: branch
+				rev: rev
+				callbackUrl: "http://:cM7I84LFT9s29u0tnxrvZaMze677ZE60@api.nibbler.cz/git/#{repo}/done" # todo do configu
+
+			igthorn.git p, (res) =>
+				res.on 'data', (data) =>
+					em.emit 'data', data
+				res.on 'end', (data) =>
+					em.emit 'end', data
 		
-	# restartProcesses: (app, branch, done) =>
-	# 	@findLatestBuild app, branch, (build) =>
-	# 		processes = []
-	# 		results = []
-	# 		## nastartovat nove procesy podle skalovaci tabulky a procfile
-	# 		@findInstances app, branch, (instances) =>
-	# 			util.log 'xxxxIIIIII'
-	# 			util.log util.inspect instances	
-	# 			for proc, data of build.procfile
-	# 				cmd = data.command
-	# 				cmd += " " + data.options.join ' ' if data.options
-	# 				## todo brat v potaz skalovani a pridelovani spravneho cisla
-	# 				## TODO pouze test
-	# 				for i in [1..2]
-	# 					processes.push {name: "#{proc}-#{i}", type: proc , cmd: cmd}
-	# 
-	# 			@startProcesses build, processes, no, (newInstances) =>
-	# 				build.out = processes 
-	# 				
-	# 				@updateRouting app, branch, () =>
-	# 					done 
-	# 				
-	# 				
-	# 				
-					
-						
-					## soft kill starejch
-					## pockat jestli se neukonci
-					## kill -9 starejch
-					
-		
+		return em
 	
+	saveBuild: (buildData, done) =>
+		@getConfig buildData.app, buildData.branch, (application) =>
+			binfo = application.branches[buildData.branch]
+			
+			binfo.lastVersion++
+
+			@db.collection('apps').save application, () =>
+				done
+					version: binfo.lastVersion
+
