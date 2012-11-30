@@ -7,13 +7,37 @@ Drekmore		= require './lib/drekmore'
 redis			= require('redis-url').connect()
 tokenParser		= require './lib/tokenParser'
 
+callsite = require('callsite')
+
 require 'coffee-trace'
 dm = new Drekmore
 
+
+##### DEBUG ONLY
 fn = util.inspect # colorized output :)
 util.inspect = (a, b, c) -> fn a, no, 5, yes 
+ul = util.log
+util.log = (string) ->
+	call = __stack[1]
+	basename = call.getFileName().replace(process.cwd() + "/" , '')
+	str = '[' + basename + ':' + call.getLineNumber() + ']'
 
+
+	if process.stdout.getWindowSize
+		[rowWidth] = process.stdout.getWindowSize()
+		str = '\u001b[s' + # save current position
+			'\u001b[' + rowWidth + 'D' + # move to the start of the line
+			'\u001b[' + (rowWidth - str.length) + 'C' + # align right
+			'\u001b[' + 90 + 'm' + str + '\u001b[39m' +
+			'\u001b[u'; # restore current position
 	
+	if string and string.split
+		lines = string.split "\n"
+		lines[0] = lines[0] + str
+		string = lines.join "\n" 
+	ul string 
+#####
+
 
 app = express()
 app.use express.bodyParser()
@@ -21,9 +45,9 @@ app.use express.bodyParser()
 expressSwaggerDoc = require 'express-swagger-doc'
 app.use expressSwaggerDoc(__filename, '/docs')
 app.use express.static __dirname + "/public"	
+app.use tokenParser	
 app.use app.router
 app.use express.errorHandler()	
-app.use tokenParser	
 
 sanitizeApp = (app) -> 
 	app += '.git' unless app.match /\.git/
@@ -34,7 +58,6 @@ Testovaci metoda
 ###
 app.get '/toadwart/add/:ip/:port', (req, res) ->
 	db.setupToadwart req.params.ip, req.params.port
-	
 	
 
 ### 
@@ -127,9 +150,6 @@ Scale
 app.post '/apps/:app/:branch/ps/scale', (req, res) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch 
-
-	req.body = JSON.parse buffer
-
 	scales = req.body.scales 
 	
 	dm.setScaling app, branch, scales, (done) ->
@@ -169,6 +189,18 @@ app.get '/git/:repo/:branch/:rev', (req, res) ->
 		res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_#{exitCode}\n"
 
 	build.run()
+
+
+
+
+###
+
+###
+app.get '/toadwart/register/:ip/:port', (req, res) ->
+	p = req.params
+	dm.registerToadwart p.ip, p.port, (done) ->
+		res.json done
+
 
 
 ###

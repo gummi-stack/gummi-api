@@ -3,17 +3,18 @@ fs				= require 'fs'
 redis			= require('redis-url').connect()
 mongoq			= require("mongoq")
 EventEmitter	= require('events').EventEmitter
-# mongoFactory	= require 'mongo-connection-factory'
-# ObjectID		= require('mongodb').ObjectID
 fs				= require 'fs'
 util			= require 'util'
-#http			= require 'http'
-#{spawn, exec}	= require 'child_process'
+request			= require 'request'
+# uuid			= require 'node-uuid'
 
 Igthorn 		= require './igthorn'
 Nginx			= require './nginx'
 
-igthorn = new Igthorn
+
+db = mongoq config.mongoUrl
+
+igthorn = new Igthorn db
 nginx = new Nginx
 
 
@@ -23,15 +24,18 @@ class ToadwartPool
 		
 	
 	getPs: (done) ->
-		igthorn.status (err, status) ->
-			if err
-				return util.log 'Stoupa asi down'
+		db.collection('toadwarts').find().toArray (err, toadwarts) =>
+			for toadwart in toadwarts
+				igthorn.status toadwart.ip, toadwart.port, (err, status) ->
+					if err
+						return util.log "Stoupa #{toadwart.id}  #{toadwart.name} asi down"
 				
-			done status
+					done status
+
 
 module.exports = class Drekmore
 	constructor: ->
-		@db = mongoq config.mongoUrl
+		@db = db
 		
 		setInterval @checkStatus, 2000
 		
@@ -129,6 +133,9 @@ module.exports = class Drekmore
 			
 			@findInstances app, branch, (instances) =>
 				@findLatestBuild app, branch, (build) =>
+					# util.log util.inspect instances
+					return done err: "No build found" unless build
+					
 					toStart = []
 					toKill = []
 					
@@ -176,10 +183,12 @@ module.exports = class Drekmore
 					async.parallel 
 						started: (cb) =>
 							if toStart.length
-								util.log util.inspect toStart
-								@startProcesses build, toStart, no , (done) =>	
-									util.log util.inspect done
-									cb null, done
+								datacenter = binfo.datacenter
+								# util.log util.inspect toStart
+								@assignProcessesByInstancesToToadwarts datacenter, toStart, instances, (processes) =>
+									@startProcesses build, processes, no , (done) =>	
+										util.log util.inspect done
+										cb null, done
 							else
 								cb null, {}
 						stopped: (cb) =>
@@ -193,6 +202,89 @@ module.exports = class Drekmore
 					, (err, result) =>
 						@updateRouting app, branch, () ->
 							done result
+	
+	
+	assignProcessesByInstancesToToadwarts: (datacenter, processes, instances, done) ->
+		@db.collection('datacenters').find
+			name: datacenter
+		.toArray (err, results) =>
+			[dc] = results
+
+			@db.collection('toadwarts').find
+				region: 
+					"$in": dc.regions
+			.toArray (err, toadwarts) =>
+				map = {}
+				for toadie in toadwarts
+					# util.log toadie
+					map[toadie.region] = 
+						instanceCount: 0
+						toadwarts: {}
+						
+					map[toadie.region].toadwarts[toadie.id] = toadie
+					toadie.instanceCount = 0
+					
+				
+				for instance in instances
+					continue unless instance.state is 'running'
+					
+					for toadie in toadwarts
+						toadie.instanceCount++ if toadie.id is instance.dynoData.toadwartId
+				
+				updateMap = () ->
+					for regionName, regionData of map
+						 # util.log regionData.instanceCount
+						 regionData.instanceCount = 0
+						 for toadieId, toadie of regionData.toadwarts
+							 regionData.instanceCount += toadie.instanceCount
+				
+				
+				getFreeRegion = () ->		 
+					lastInstanceCount = 999999 # todo
+					selectedRegion = null
+					for regionName, regionData of map					
+						if lastInstanceCount > regionData.instanceCount
+							selectedRegion = regionName
+							lastInstanceCount = regionData.instanceCount
+							
+					selectedRegion
+				
+				getFreetoadwartFromRegion = (region) ->
+					lastInstanceCount = 999999 # todo
+					selectedToadwart = null
+					
+					for id, toadie of map[region].toadwarts
+						if lastInstanceCount > toadie.instanceCount
+							selectedToadwart = toadie
+							lastInstanceCount = toadie.instanceCount
+					selectedToadwart 
+						
+				
+				for process in processes
+					updateMap()
+					region = getFreeRegion()
+					toadwart = getFreetoadwartFromRegion region
+					toadwart.instanceCount++
+					process.toadwartId = toadwart.id
+					
+				updateMap()
+					
+				
+				
+					 # util.log regionData.instanceCount
+				
+				
+				util.log '-----------------------------------------------------------------------------'
+				util.log util.inspect map
+				util.log '-----------------------------------------------------------------------------'
+				# util.log util.inspect region
+				# util.log util.inspect toadwart  
+				util.log util.inspect processes  
+				util.log '-----------------------------------------------------------------------------'
+				# throw new Error 'xxx'
+		
+				done processes 
+		
 	
 					
 	runProcessRendezvous: (app, branch, command, userEnv, done) =>
@@ -214,12 +306,16 @@ module.exports = class Drekmore
 						cmd: command
 						env: application.env # todo pripadne opatchovat branchi
 						userEnv: userEnv 
-						
-					@startProcesses build, [process], yes, (results) ->
-						[result] = results
-						# process.result = result.dynoData.rendezvousURI
-						# util.log util.inspect process
-						done rendezvousURI: result.dynoData.rendezvousURI
+					processes = [process]
+					
+					datacenter = application.branches[branch].datacenter
+					
+					@assignProcessesByInstancesToToadwarts datacenter, processes, instances, (processes) =>
+						@startProcesses build, processes, yes, (results) ->
+							[result] = results
+							# process.result = result.dynoData.rendezvousURI
+							# util.log util.inspect process
+							done rendezvousURI: result.dynoData.rendezvousURI
 
 		
 	findInstances: (app, branch, done) ->
@@ -235,12 +331,20 @@ module.exports = class Drekmore
 
 
 	findLatestBuild: (app, branch, done) ->
-		@db.collection('builds').find
-			app: app
-			branch: branch
-		.sort(timestamp: -1).limit(1).toArray (err, results) ->
-			[build] = results
-			done build
+		@getConfig app, branch, (application) =>
+			binfo = application.branches[branch]
+			util.log "Last #{app}/#{branch} version #{binfo.lastVersion}"
+			return done null unless binfo.lastVersion
+			
+			@db.collection('builds').find
+				app: app
+				branch: branch
+				version: binfo.lastVersion
+			.toArray (err, results) ->
+				[build] = results
+				util.log "Last #{app}/#{branch} build #{build}"
+				# util.log util.inspect build
+				done build
 	
 	
 	removeInstance: (instance, done) =>
@@ -261,9 +365,6 @@ module.exports = class Drekmore
 	stopInstances: (instances, done) =>
 		for instance in instances
 			do(instance) =>
-				o = 	
-					name: instance.dynoData?.name
-					pid: instance.dynoData?.pid
 				instance.state = 'stopping'
 				
 				@db.collection('instances').save instance, () =>
@@ -273,7 +374,7 @@ module.exports = class Drekmore
 						@removeInstance instance, ->
 					else
 						if instance.dynoData  # byl spusten na stoupovi
-							igthorn.softKill o, (err, res) =>
+							igthorn.softKill instance.dynoData, (err, res) =>
 								return util.log 'Nepovedlo se zastavit process' if err		
 								# console.log 'rrrrrrrrrrrrrrrrrrrrrrrrrr'
 								util.log util.inspect err
@@ -294,7 +395,7 @@ module.exports = class Drekmore
 	
 
 	startProcesses: (build, processes, rendezvous, done) =>
-		util.log util.inspect build
+		# util.log util.inspect build
 		
 		instances = []
 		
@@ -311,8 +412,9 @@ module.exports = class Drekmore
 				rendezvous: rendezvous
 				env: item.env
 				userEnv: item.userEnv
+				toadwartId: item.toadwartId
 
-
+			# util.log util.inspect opts
 			instance = 
 				buildId: build._id
 				app: build.app
@@ -328,7 +430,7 @@ module.exports = class Drekmore
 				else
 					instance.dynoData = r		
 					instance.state = 'running'
-				util.log util.inspect r
+				# util.log util.inspect r
 				# item.result = r
 				# util.log util.inspect build
 						
@@ -387,8 +489,32 @@ module.exports = class Drekmore
 			binfo = application.branches[buildData.branch]
 			
 			binfo.lastVersion++
+			buildData.version = binfo.lastVersion
 
-			@db.collection('apps').save application, () =>
-				done
-					version: binfo.lastVersion
+			@db.collection('builds').save buildData, () =>
+				@db.collection('apps').save application, () =>
+					done
+						version: binfo.lastVersion
 
+	registerToadwart: (ip, port, done) =>
+		request.get "http://#{ip}:#{port}/ps/status", (error, response, body) =>
+			info = JSON.parse body
+			
+			@db.collection('toadwarts').find
+				id: info.id
+			.toArray (err, results) =>
+				[data] = results
+				data ?= {}
+				
+				data.id = info.id
+				data.name = info.name
+				data.ip = info.ip
+				data.port = info.port
+					
+				@db.collection('toadwarts').save data, () ->
+					done data
+					
+			
+		
+		
+		

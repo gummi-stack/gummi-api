@@ -12,7 +12,9 @@
 	"procfile": "*",
 	"coffee-script": "*",
 	"mongoq": "*",
-	"colors": "*"
+	"colors": "*",
+	"callsite": "*",
+	"request": "*"
   },
   "license": "BSD"
 }
