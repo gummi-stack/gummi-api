@@ -12,8 +12,8 @@ module.exports = class Igthorn
 		# @port = 80
 	
 	start: (data, done) ->
-		util.log "Volam start: #{data.slug}, #{data.cmd} #{data.name} #{data.worker}"
-		util.log util.inspect data.userEnv
+		util.log "Volam start: #{data.slug}, #{data.cmd} #{data.name} #{data.worker} #{data.toadwartId}"
+		# util.log util.inspect data.userEnv
 		data.env = {} unless data.env
 		data.env.GUMMI = 'BEAR'
 		
@@ -42,7 +42,7 @@ module.exports = class Igthorn
 		o = 	
 			name: data?.name
 			pid: data?.pid
-		util.log util.inspect o
+		# util.log util.inspect o
 		
 		@findToadwartById data.toadwartId, (toadwart) =>
 			ip = toadwart.ip

@@ -6,12 +6,14 @@ GLOBAL.config	= require './config'
 Drekmore		= require './lib/drekmore'
 redis			= require('redis-url').connect()
 tokenParser		= require './lib/tokenParser'
+Book		= require './lib/book'
 
 callsite = require('callsite')
 
 require 'coffee-trace'
 dm = new Drekmore
 
+book = new Book
 
 ##### DEBUG ONLY
 fn = util.inspect # colorized output :)
@@ -227,53 +229,10 @@ app.get '/apps/:app/:branch/logs', (req, res) ->
 	start = new Date().getTime() * 1000;
 	util.log util.inspect tail
 
-	processResponse = (response) ->
-		#todo colorizovat podle workeru ?
-		for time,i in response by 2
-			data = response[i+1]
-			date = new Date(time/1000)
-			line = date.toJSON().replace(/T/, ' ').replace(/Z/, ' ').cyan
-			matches = data.match /([^\s]*)\s- -(.*)/
-			worker = matches[1]
-			if worker is 'dyno'
-				worker = worker.magenta
-			else
-				worker = worker.yellow
-			
-			line += "[#{worker}] #{matches[2]}\n"
-			res.write line
-			# process.stdout.write line
 
-	
-	closed = no
-	res.on 'close', ->
-		closed = yes
+	# TODO test only
+	book.getLogs app, branch, res
 
-	getNext = () ->
-		return if closed 
-		
-		# nacteni novych od posledniho dotazu
-		opts = ["#{app}/#{branch}", '+inf', start, 'WITHSCORES']
-		start = new Date().getTime() * 1000;
-
-		redis.zrevrangebyscore opts, (err, response) ->
-			# util.log 'dalsi ' + start
-			# util.log util.inspect res.complete
-			
-			processResponse response.reverse()
-			setTimeout (() -> getNext()), 1000 
-		
-
-
-	opts = ["#{app}/#{branch}", start, '-inf', 'WITHSCORES', 'LIMIT', '0', '10']
-	# nacteni odted do historie
-	redis.zrevrangebyscore opts, (err, response) ->
-		processResponse response.reverse()
-		if tail
-			getNext()
-		else 
-			res.end()
-			
 
 app.listen config.port
 util.log "server listening on #{config.port}"
