@@ -19,7 +19,7 @@ logMessage = (message, level)->
 
 db = mongoq config.mongoUrl
 
-igthorn = new Igthorn db
+igthorn = new Igthorn process.config #todo
 nginx = new Nginx
 book = new Book
 
