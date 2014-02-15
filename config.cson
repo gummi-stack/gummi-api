@@ -2,5 +2,5 @@ port: 9001
 mongoUrl: "mongodb://192.168.13.7/gummi?auto_reconnect=true&safe=true;"
 api:
 	scheme: "http"
-	host: "192.168.215.129"
+	host: "192.168.13.7"
 	key: "cM7I84LFT9s29u0tnxrvZaMze677ZE60"
