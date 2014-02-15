@@ -1,6 +1,7 @@
 util = require 'util'
 request = require 'request'
 http = require 'http'
+EventEmitter	= require('events').EventEmitter
 
 module.exports = class Igthorn
 	constructor: (config,@db) ->
@@ -58,36 +59,43 @@ module.exports = class Igthorn
 			uri: "http://#{ip}:#{port}#{url}"
 		request opts, done
 
-	git: (data, done) =>
+	git: (data, cb) =>
 		@findToadwartForBuild (err, toadwart)=>
-			method = 'POST'
-			ip = toadwart.ip
-			port = toadwart.port
-			url = '/git/build'
+			emitter = new EventEmitter
+			emitter.run = () ->
+				method = 'POST'
+				ip = toadwart.ip
+				port = toadwart.port
+				url = '/git/build'
 
-			data = JSON.stringify data
-			headers =
-				'Accept': 'application/json'
-				'Content-Type': 'application/json; charset=utf-8'
-				'Content-Length': data.length
-
-
-			opts =
-				host: ip
-				port: port
-				path: url
-				method: method
-				headers: headers
-
-			req = http.request opts, (res) =>
-				res.setEncoding 'utf8'
-				return done(res)
+				data = JSON.stringify data
+				headers =
+					'Accept': 'application/json'
+					'Content-Type': 'application/json; charset=utf-8'
+					'Content-Length': data.length
 
 
-			req.on 'error', (err) ->
-				util.log "Igthorn.git"
-				util.log util.inspect err
-				util.log err if err
+				opts =
+					host: ip
+					port: port
+					path: url
+					method: method
+					headers: headers
 
-			req.write data
-			req.end()
+				req = http.request opts, (res) =>
+					res.setEncoding 'utf8'
+					res.on 'error', (err)->
+						emitter.emit 'error', err
+					res.on 'data', (data)->
+						emitter.emit 'data', data
+					res.on 'end', (data)->
+						emitter.emit 'end', data
+
+				
+
+				req.on 'error', (err) ->
+					emitter.emit 'error', err
+
+				req.write data
+				req.end()
+			return cb(emitter)

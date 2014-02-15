@@ -635,24 +635,15 @@ module.exports = class Drekmore
 					done o
 
 
-	buildStream: (repo, branch, rev) =>
-		em = new EventEmitter
-		em.run = () ->
-			p =
-				repo: repo
-				branch: branch
-				rev: rev
-				callbackUrl: "#{config.api.scheme}://:#{config.api.key}@#{config.api.host}/git/#{repo}/done"
-				hostname: nodename.get()
+	buildStream: (repo, branch, rev, cb) =>
+		p =
+			repo: repo
+			branch: branch
+			rev: rev
+			callbackUrl: "#{config.api.scheme}://:#{config.api.key}@#{config.api.host}/git/#{repo}/done"
+			hostname: nodename.get()
 
-			igthorn.git p, (res) =>
-				res.on 'data', (data) =>
-					em.emit 'data', data
-				res.on 'error', (error)=>
-					em.emit 'error', error
-				res.on 'end', (data) =>
-					em.emit 'end', data
-		return em
+		igthorn.git p, cb
 
 	saveBuild: (buildData, done) =>
 		@getConfig buildData.app, buildData.branch, (err, application) =>

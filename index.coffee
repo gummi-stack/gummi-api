@@ -157,17 +157,19 @@ Private! githook only
 ###
 app.get '/git/:repo/:branch/:rev', (req, res, next) ->
 	p = req.params
-	build = dm.buildStream p.repo, p.branch, p.rev
+	dm.buildStream p.repo, p.branch, p.rev, (build)->
 
-	build.on 'data', (data) ->
-		res.write data
-	build.on 'end', (exitCode) ->
-		exitCode = 1 unless exitCode
-		res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_#{exitCode}\n"
-	build.on 'error', (error)->
-		console.log "error: ",error
-		res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_1\n"
-	build.run()
+		build.on 'data', (data) ->
+			res.write data
+		build.on 'end', (exitCode) ->
+			exitCode = 1 unless exitCode
+			res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_#{exitCode}\n"
+		build.on 'error', (error)->
+			console.log "error: ",error
+			res.write "Stoupa ECONNRESET\n"
+			res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_1\n"
+		
+		build.run()
 
 
 
