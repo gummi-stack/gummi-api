@@ -161,6 +161,7 @@ app.get '/git/:repo/:branch/:rev', (req, res) ->
 	build.on 'data', (data) ->
 		res.write data
 	build.on 'end', (exitCode) ->
+		exitCode = 1 unless exitCode
 		res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_#{exitCode}\n"
 	build.on 'error', (error)->
 		console.log "error: ",error
@@ -178,7 +179,9 @@ app.get '/toadwart/register/:ip/:port', (req, res) ->
 	dm.registerToadwart p.ip, p.port, (err, done) ->
 		res.json {error: err, data: done}
 
-
+app.get '/toadwarts', (req, res)->
+	dm.getToadwartsStatus yes, (err, data)->
+		res.json {error: err, data: data}
 
 app.get '/datacenters', (req, res)->
 	res.json "mrdka": yes

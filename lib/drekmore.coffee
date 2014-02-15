@@ -19,7 +19,7 @@ logMessage = (message, level)->
 
 db = mongoq config.mongoUrl
 
-igthorn = new Igthorn process.config #todo
+igthorn = new Igthorn process.config, db #todo
 nginx = new Nginx
 book = new Book process.config #todo
 
@@ -36,6 +36,28 @@ class ToadwartPool
 						return logMessage "Stoupa #{toadwart.id} #{toadwart.name} asi down. #{err}"
 				
 					done status
+	getToadwarts: (checkStatus, done)->
+		ret = []
+		db.collection('toadwarts').find().toArray (err, toadwarts) =>
+			return done err if err
+			console.log "aaa"	
+			for toadwart in toadwarts
+				console.log toadwart
+				ret.push toadwart
+			return done(null,ret) unless checkStatus
+			async.each ret,(t,next)->
+				igthorn.status t.ip, t.port, (err, status)->
+
+					console.log status.body
+					t.mrdka = yes
+					next(err, t)
+			,(err,data)->
+				console.log "d"
+				console.log arguments
+				done(err,data)
+					
+				
+			
 
 
 module.exports = class Drekmore
@@ -47,7 +69,10 @@ module.exports = class Drekmore
 		
 		@tp = new ToadwartPool
 		
-	
+
+	getToadwartsStatus: (forceCheck, done)=>
+		@tp.getToadwarts forceCheck, done
+
 	matchPsTable: (status, done) =>
 
 		toadwartId = status.id
