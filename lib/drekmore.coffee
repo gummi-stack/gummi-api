@@ -37,7 +37,7 @@ class ToadwartPool
 					if err
 						return logMessage "Stoupa #{toadwart.id} #{toadwart.name} asi down. #{err}"
 
-					done status
+					done null, status
 
 
 	getToadwarts: (checkStatus, done)->
@@ -664,6 +664,7 @@ module.exports = class Drekmore
 	registerToadwart: (ip, port, done) =>
 		request.get "http://#{ip}:#{port}/ps/status", (error, response, body) =>
 			return done error if error
+
 			try
 				info = JSON.parse body
 			catch err
