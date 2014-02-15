@@ -21,7 +21,7 @@ db = mongoq config.mongoUrl
 
 igthorn = new Igthorn process.config #todo
 nginx = new Nginx
-book = new Book
+book = new Book process.config #todo
 
 
 class ToadwartPool
@@ -567,7 +567,6 @@ module.exports = class Drekmore
 					em.emit 'error', error
 				res.on 'end', (data) =>
 					em.emit 'end', data
-		
 		return em
 	
 	saveBuild: (buildData, done) =>

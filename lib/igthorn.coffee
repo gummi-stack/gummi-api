@@ -1,6 +1,6 @@
 util = require 'util'
 request = require 'request'
-
+http = require 'http'
 
 module.exports = class Igthorn
 	constructor: (config) ->
@@ -51,7 +51,37 @@ module.exports = class Igthorn
 		opts=
 			method: method
 			json: data
-			uri: "http://#{ip}:#{port}/url"
+			uri: "http://#{ip}:#{port}#{url}"
 		request opts, done
 	git: (data, done) ->
-		@request "POST", @ip, @port, '/git/build', data, done
+		method = 'POST'
+		ip = @ip
+		port = @port
+		url = '/git/build'
+		
+		data = JSON.stringify data
+		headers =
+			'Accept': 'application/json'
+			'Content-Type': 'application/json; charset=utf-8'
+			'Content-Length': data.length
+
+				
+		opts =
+			host: ip
+			port: port
+			path: url
+			method: method
+			headers: headers
+		
+		req = http.request opts, (res) =>
+			res.setEncoding 'utf8'
+			return done(res)
+
+	
+		req.on 'error', (err) ->
+			util.log "Igthorn.git"
+			util.log util.inspect err
+			util.log err if err
+
+		req.write data
+		req.end()

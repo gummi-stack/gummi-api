@@ -11,7 +11,7 @@ Book		= require './lib/book'
 
 require 'coffee-trace'
 dm = new Drekmore(config)
-book = new Book
+book = new Book(config)
 
 
 app = express()

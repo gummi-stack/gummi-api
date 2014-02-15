@@ -5,15 +5,15 @@ request = require 'request'
 
 
 module.exports = class Book
-	constructor: (@db) ->
-		@ip = '10.1.69.105'
-		@port = 5000
-		# @ip = '10.11.1.9'
-		# @port = 80
-
+	
+	constructor: (config) ->
+		@ip = config.api.host
+		@port = config.port
+		@apiUrl = "#{config.api.scheme}://#{config.api.host}:#{config.port}"
+	
 
 	getLogs: (app, branch, res) =>
-		request("http://#{@ip}:#{@port}/session/#{app}/#{branch}").pipe res
+		request("#{@apiUrl}/session/#{app}/#{branch}").pipe res
 		# request.get 
 		# 	url: "http://#{@ip}:#{@port}/session/#{app}/#{branch}"
 		# , (err, req, body) =>
@@ -23,7 +23,7 @@ module.exports = class Book
 		
 	getId: (app, branch, type, done) =>
 		request.post 
-			url: "http://#{@ip}:#{@port}/sessions"
+			url: "#{@apiUrl}/sessions"
 			json:
 				app: app
 				branch: branch
