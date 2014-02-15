@@ -44,21 +44,22 @@ class ToadwartPool
 		ret = []
 		db.collection('toadwarts').find().toArray (err, toadwarts) =>
 			return done err if err
-			console.log "aaa"
-			for toadwart in toadwarts
-				console.log toadwart
-				ret.push toadwart
-			return done(null,ret) unless checkStatus
-			async.each ret,(t,next)->
+			return done(null,toadwarts) unless checkStatus
+			
+			async.each toadwarts,(t,next)->
 				igthorn.status t.ip, t.port, (err, status)->
-
-					console.log status.body
-					t.mrdka = yes
-					next(err, t)
-			,(err,data)->
-				console.log "d"
-				console.log arguments
-				done(err,data)
+					if err
+						t.status = err
+						return next(err)
+					try
+						s = JSON.parse status.body
+					catch err
+						t.status = err
+						return next(err)
+					t.status = s
+					next(err)
+			,(err)->
+				done(err,toadwarts)
 
 
 module.exports = class Drekmore
