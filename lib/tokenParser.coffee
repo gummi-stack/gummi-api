@@ -3,7 +3,7 @@ module.exports = (req, res, next) ->
 
 	authorization = req.headers.authorization
 
-	if authorization 
+	if authorization
 		parts = authorization.split ' '
 
 	

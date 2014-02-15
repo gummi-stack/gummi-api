@@ -1,7 +1,7 @@
 util = require 'util'
 http = require 'http'
 
-
+request = require 'request'
 
 
 module.exports = class Igthorn
@@ -86,14 +86,15 @@ module.exports = class Igthorn
 					done null, data
 		
 		req.on 'error', (err) ->
-			util.log err if err
-			done err	
+			done err
 		if method is 'POST'
 			req.write data
 		req.end()
 	
 	
 	git: (data, done) ->
+
+
 		method = 'POST'
 		ip = @ip
 		port = @port
@@ -119,6 +120,7 @@ module.exports = class Igthorn
 
 	
 		req.on 'error', (err) ->
+			util.log util.inspect err
 			util.log err if err
 
 		req.write data

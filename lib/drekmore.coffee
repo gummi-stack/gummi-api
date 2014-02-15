@@ -1,11 +1,11 @@
 async			= require 'async'
 fs				= require 'fs'
-redis			= require('redis-url').connect()
 mongoq			= require("mongoq")
 EventEmitter	= require('events').EventEmitter
 fs				= require 'fs'
 util			= require 'util'
 request			= require 'request'
+colors = require 'colors'
 # uuid			= require 'node-uuid'
 
 nodename		= require './nodename'
@@ -14,7 +14,8 @@ Nginx			= require './nginx'
 Book			= require './book'
 
 
-
+logMessage = (message, level)->
+	util.log message
 
 db = mongoq config.mongoUrl
 
@@ -24,7 +25,7 @@ book = new Book
 
 
 class ToadwartPool
-	constructor: ->
+	constructor: ()->
 		@toadwarts = []
 	
 	getPs: (done) ->
@@ -32,18 +33,17 @@ class ToadwartPool
 			for toadwart in toadwarts
 				igthorn.status toadwart.ip, toadwart.port, (err, status) ->
 					if err
-						return util.log "Stoupa #{toadwart.id}  #{toadwart.name} asi down"
+						return logMessage "Stoupa #{toadwart.id} #{toadwart.name} asi down. #{err}"
 				
 					done status
 
 
 module.exports = class Drekmore
-	constructor: ->
-		@db = db
+	constructor: ()->
 		@ensureLock = {}
 		
 		setInterval @checkStatus, 2000
-		
+		@db = db
 		
 		@tp = new ToadwartPool
 		
@@ -61,7 +61,7 @@ module.exports = class Drekmore
 				for pid, process of status.processes
 					if process.uuid is instance.dynoData.uuid
 						process.found = yes
-						return no 
+						return no
 				util.log "Nasel sem padlou instanci".green
 				yes
 			
@@ -75,7 +75,7 @@ module.exports = class Drekmore
 			# util.log util.inspect orphans	
 				
 			
-			@removeInstance instance for instance in crashedInstances 
+			@removeInstance instance for instance in crashedInstances
 			
 			done()
 		
@@ -182,7 +182,7 @@ module.exports = class Drekmore
 					# util.log util.inspect instances
 					unless build
 						delete @ensureLock[hash]
-						return done err: "No build found" 
+						return done err: "No build found"
 						
 					toStart = []
 					toKill = []
@@ -223,7 +223,7 @@ module.exports = class Drekmore
 							continue
 						unless scales[type] > id
 							toKill.push instance 
-						else if instance.state is 'deposing' 
+						else if instance.state is 'deposing'
 							
 							for instance2 in instances
 								# and existuje running nahrada
@@ -231,7 +231,7 @@ module.exports = class Drekmore
 									toKill.push instance
 				
 				
-					async.parallel 
+					async.parallel
 						started: (cb) =>
 							
 							util.log util.inspect toStart
@@ -242,7 +242,7 @@ module.exports = class Drekmore
 									return cb null, []
 								# util.log util.inspect toStart
 								@assignProcessesByInstancesToToadwarts datacenter, toStart, instances, (processes) =>
-									@startProcesses build, processes, no, (instances) =>	
+									@startProcesses build, processes, no, (instances) =>
 										# util.log util.inspect done
 										cb null, instances
 							else
@@ -553,16 +553,18 @@ module.exports = class Drekmore
 	buildStream: (repo, branch, rev) =>
 		em = new EventEmitter
 		em.run = () ->
-			p = 
+			p =
 				repo: repo
 				branch: branch
 				rev: rev
-				callbackUrl: "http://:cM7I84LFT9s29u0tnxrvZaMze677ZE60@api.nibbler.cz/git/#{repo}/done" # todo do configu
+				callbackUrl: "#{config.api.scheme}://:#{config.api.key}@#{config.api.host}/git/#{repo}/done"
 				hostname: nodename.get()
 
 			igthorn.git p, (res) =>
 				res.on 'data', (data) =>
 					em.emit 'data', data
+				res.on 'error', (error)=>
+					em.emit 'error', error
 				res.on 'end', (data) =>
 					em.emit 'end', data
 		
@@ -582,7 +584,11 @@ module.exports = class Drekmore
 
 	registerToadwart: (ip, port, done) =>
 		request.get "http://#{ip}:#{port}/ps/status", (error, response, body) =>
-			info = JSON.parse body
+			return done error if error
+			try
+				info = JSON.parse body
+			catch err
+				return done err
 			
 			@db.collection('toadwarts').find
 				id: info.id
@@ -592,13 +598,22 @@ module.exports = class Drekmore
 				
 				data.id = info.id
 				data.name = info.name
-				data.ip = info.ip
-				data.port = info.port
+				data.ip = ip
+				data.port = port
 					
-				@db.collection('toadwarts').save data, () ->
-					done data
+				@db.collection('toadwarts').save data, (err) ->
+					done err, data
 					
 			
-		
-		
+	registerDatacenter: (name, regions, done)=>
+		@db.collection("datacenters").find
+			name: name
+		.toArray (err, dc)->
+			return done err if err
+			[data] = dc
+			data ?= {}
+
+			data.regions = regions
+			@db.collection('datacenters').save data, (err)->
+				done err, data
 		

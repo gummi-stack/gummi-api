@@ -1,20 +1,22 @@
 {
-  "name": "toadwart",
+  "name": "gummi-api",
   "version": "0.9.0",
   "main": "index.coffee",
   "dependencies": {
     "express": "*",
     "async": "*",
-	"pty.js": "*",
-	"redis": "*",
-	"hiredis": "*",
-	"redis-url": "*",
-	"procfile": "*",
-	"coffee-script": "*",
-	"mongoq": "*",
-	"colors": "*",
-	"callsite": "*",
-	"request": "*"
+    "pty.js": "*",
+    "redis": "*",
+    "hiredis": "*",
+    "redis-url": "*",
+    "procfile": "*",
+    "coffee-script": "*",
+    "mongoq": "*",
+    "colors": "*",
+    "callsite": "*",
+    "request": "~2.33.0",
+    "cson-config": "~0.1.7",
+    "coffee-trace": "~1.4.0"
   },
   "license": "BSD"
 }
