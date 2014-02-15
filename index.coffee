@@ -16,8 +16,7 @@ book = new Book(config)
 
 app = express()
 app.use (req, res, next)->
-	console.log req.method
-	console.log req.path
+	console.log "#{req.method} #{req.path}"
 	next()
 app.use express.urlencoded()
 app.use express.json()
