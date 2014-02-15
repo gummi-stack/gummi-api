@@ -50,7 +50,7 @@ class ToadwartPool
 				igthorn.status t.ip, t.port, (err, status)->
 					if err
 						t.status = err
-						return next(err)
+						return next()
 					try
 						s = JSON.parse status.body
 					catch err
