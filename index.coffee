@@ -183,6 +183,10 @@ app.get '/toadwart/register/:ip/:port', (req, res, next) ->
 	dm.registerToadwart p.ip, p.port, (err, done) ->
 		return next err if err
 		res.json done
+app.get '/toadwart/unregister/:id', (req, res, next)->
+	dm.unRegisterToadwart req.params.id, (err, done)->
+		return next err if err
+		res.json {done: yes}
 
 app.get '/toadwarts', (req, res, next)->
 	dm.getToadwartsStatus yes, (err, data)->

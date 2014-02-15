@@ -32,7 +32,7 @@ class ToadwartPool
 		db.collection('toadwarts').find().toArray (err, toadwarts) =>
 			return done err if err
 
-			for toadwart in toadwarts
+			toadwarts.forEach (toadwart)->
 				igthorn.status toadwart.ip, toadwart.port, (err, status) ->
 					if err
 						return logMessage "Stoupa #{toadwart.id} #{toadwart.name} asi down. #{err}"
@@ -684,6 +684,9 @@ module.exports = class Drekmore
 				@db.collection('toadwarts').save data, (err) ->
 					done null, data
 
+	unRegisterToadwart: (id,cb)=>
+		@db.collection('toadwarts').remove {id: id}, cb
+			
 
 	registerDatacenter: (name, regions, done)=>
 		@db.collection("datacenters").find
