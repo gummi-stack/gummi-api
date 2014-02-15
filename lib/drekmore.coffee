@@ -571,8 +571,12 @@ module.exports = class Drekmore
 				time: new Date
 
 			# TODO ziskavat idcka najednou
-			book.getId build.app, build.branch, ':dyno', (dynouuid) =>
-				book.getId build.app, build.branch, opts.worker, (wuuid) =>
+			book.getId build.app, build.branch, ':dyno', (err, dynouuid) =>
+				return done err if err
+
+				book.getId build.app, build.branch, opts.worker, (err, wuuid) =>
+					return done err if err
+
 					opts.logUuid = wuuid
 					opts.dynoUuid = dynouuid
 					# util.log util.inspect opts
@@ -622,7 +626,9 @@ module.exports = class Drekmore
 				nodes.push instance.dynoData
 
 
-			book.getId app, branch, ':routing', (bookId) ->
+			book.getId app, branch, ':routing', (err, bookId) ->
+				return done err if err
+
 				nginx.updateUpstream app, branch, nodes, bookId
 				nginx.reload (o) ->
 					done o
