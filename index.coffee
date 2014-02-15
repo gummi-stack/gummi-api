@@ -166,6 +166,7 @@ app.get '/git/:repo/:branch/:rev', (req, res, next) ->
 		res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_#{exitCode}\n"
 	build.on 'error', (error)->
 		console.log "error: ",error
+		res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_1\n"
 	build.run()
 
 
