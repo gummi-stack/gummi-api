@@ -182,7 +182,7 @@ app.get '/toadwart/register/:ip/:port', (req, res, next) ->
 		return next err if err
 		res.json done
 
-app.get '/toadwarts', (req, res)->
+app.get '/toadwarts', (req, res, next)->
 	dm.getToadwartsStatus yes, (err, data)->
 		return next err if err
 		res.json data
