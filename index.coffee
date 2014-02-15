@@ -1,13 +1,13 @@
 (require 'cson-config').load()
-colors			= require 'colors'
-express			= require 'express'
-util			= require 'util'
+colors        = require 'colors'
+express       = require 'express'
+util          = require 'util'
 
-GLOBAL.config	= process.config
-config	= process.config
-Drekmore		= require './lib/drekmore'
-tokenParser		= require './lib/tokenParser'
-Book		= require './lib/book'
+GLOBAL.config = process.config
+config        = process.config
+Drekmore      = require './lib/drekmore'
+tokenParser   = require './lib/tokenParser'
+Book          = require './lib/book'
 
 require 'coffee-trace'
 dm = new Drekmore(config)
@@ -36,16 +36,17 @@ sanitizeApp = (app) ->
 	app
 
 
-### 
+###
 List application processes
 
 :app - application name
 :branch - branch name
 ###
-app.get '/apps/:app/:branch/ps', (req, res) ->
+app.get '/apps/:app/:branch/ps', (req, res, next) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch
-	dm.findInstances app, branch, (instances) ->
+	dm.findInstances app, branch, (err, instances) ->
+		return next err if err
 		res.json instances
 
 
@@ -55,7 +56,7 @@ Stop all processes
 :app - application name
 :branch - branch name
 ###
-app.get '/apps/:app/:branch/ps/stop', (req, res) ->
+app.get '/apps/:app/:branch/ps/stop', (req, res, next) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch
 
@@ -72,7 +73,7 @@ Restart all processes
 :app - application name
 :branch - branch name
 ###
-app.get '/apps/:app/:branch/ps/restart', (req, res) ->
+app.get '/apps/:app/:branch/ps/restart', (req, res, next) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch
 
@@ -89,33 +90,34 @@ Start new process
 :app - application name
 :branch - branch
 ###
-app.post '/apps/:app/:branch/ps', (req, res) ->
+app.post '/apps/:app/:branch/ps', (req, res, next) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch
 
 	command = req.body.command
 	userEnv = req.body.env
 
-	dm.runProcessRendezvous app, branch, command, userEnv, (process) ->
+	dm.runProcessRendezvous app, branch, command, userEnv, (err, process) ->
+		return next err if err
 		res.json process
-			
-				
-	
+
+
+
 ###
 Get application scaling
 
 :app - application name
 :branch - branch
 ###
-app.get '/apps/:app/:branch/ps/scale', (req, res) ->
+app.get '/apps/:app/:branch/ps/scale', (req, res, next) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch
-	
+
 	dm.getConfig app, branch, (config) ->
 		br = config.branches[branch]
 		res.json br.scale
 
-			
+
 ###
 Scale
 
@@ -123,11 +125,11 @@ Scale
 :branch - branch
 :scales - {"web": 2, "daemon": 4}
 ###
-app.post '/apps/:app/:branch/ps/scale', (req, res) ->
+app.post '/apps/:app/:branch/ps/scale', (req, res, next) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch
 	scales = req.body.scales
-	
+
 	dm.setScaling app, branch, scales, (done) ->
 		res.json done
 
@@ -141,7 +143,7 @@ app.all '/git/:repo/*', (req, res, next) ->
 Callback url for toadwart on successful build
 Private! toadwart only
 ###
-app.post '/git/:repo/done', (req, res) ->
+app.post '/git/:repo/done', (req, res, next) ->
 	p = req.params
 	b = req.body
 
@@ -154,10 +156,10 @@ app.post '/git/:repo/done', (req, res) ->
 Build revision from git
 Private! githook only
 ###
-app.get '/git/:repo/:branch/:rev', (req, res) ->
+app.get '/git/:repo/:branch/:rev', (req, res, next) ->
 	p = req.params
 	build = dm.buildStream p.repo, p.branch, p.rev
-	
+
 	build.on 'data', (data) ->
 		res.write data
 	build.on 'end', (exitCode) ->
@@ -173,42 +175,45 @@ app.get '/git/:repo/:branch/:rev', (req, res) ->
 ###
 
 ###
-app.get '/toadwart/register/:ip/:port', (req, res) ->
+app.get '/toadwart/register/:ip/:port', (req, res, next) ->
 	p = req.params
 
 	dm.registerToadwart p.ip, p.port, (err, done) ->
-		res.json {error: err, data: done}
+		return next err if err
+		res.json done
 
 app.get '/toadwarts', (req, res)->
 	dm.getToadwartsStatus yes, (err, data)->
 		res.json {error: err, data: data}
 
-app.get '/datacenters', (req, res)->
+app.get '/datacenters', (req, res, next)->
 	res.json "mrdka": yes
 
-app.get '/datacenter/register/:name', (req, res)->
+app.get '/datacenter/register/:name', (req, res, next)->
 	dm.registerDatacenter req.params.name, [], (err, done)->
-		res.json {error: err, data: done}
+		return next err if err
+		res.json done
 
 ###
 List all applications
 
 ###
-app.get '/apps/', (req, res) ->
-	dm.listApps (applications) ->
-			res.json applications
-	
+app.get '/apps/', (req, res, next) ->
+	dm.listApps (err, applications) ->
+		return next err if err
+		res.json applications
+
 
 ###
-Get application logs 
+Get application logs
 
 :app - application name
 :branch - branch name
 :tail - bool - enable live tailing
 ###
-app.get '/apps/:app/:branch/logs', (req, res) ->
+app.get '/apps/:app/:branch/logs', (req, res, next) ->
 	app = sanitizeApp req.params.app
-	branch = req.params.branch 
+	branch = req.params.branch
 	tail = req.query.tail
 
 	start = new Date().getTime() * 1000;
