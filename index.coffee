@@ -112,7 +112,9 @@ app.get '/apps/:app/:branch/ps/scale', (req, res, next) ->
 	app = sanitizeApp req.params.app
 	branch = req.params.branch
 
-	dm.getConfig app, branch, (config) ->
+	dm.getConfig app, branch, (err, config) ->
+		console.log arguments
+		return next err if err
 		br = config.branches[branch]
 		res.json br.scale
 
@@ -129,7 +131,8 @@ app.post '/apps/:app/:branch/ps/scale', (req, res, next) ->
 	branch = req.params.branch
 	scales = req.body.scales
 
-	dm.setScaling app, branch, scales, (done) ->
+	dm.setScaling app, branch, scales, (err, done) ->
+		return next err if err
 		res.json done
 
 
@@ -155,9 +158,10 @@ app.post '/git/:repo/done', (req, res, next) ->
 Build revision from git
 Private! githook only
 ###
-app.get '/git/:repo/:branch/:rev', (req, res, next) ->
+app.post '/git/:repo/:branch/:rev', (req, res, next) ->
+#app.get '/git/:repo/:branch/:rev', (req, res, next) ->
 	p = req.params
-	dm.buildStream p.repo, p.branch, p.rev, (build)->
+	dm.buildStream req, p.repo, p.branch, p.rev, (build)->
 
 		build.on 'data', (data) ->
 			res.write data

@@ -635,7 +635,7 @@ module.exports = class Drekmore
 					done o
 
 
-	buildStream: (repo, branch, rev, cb) =>
+	buildStream: (req, repo, branch, rev, cb) =>
 		p =
 			repo: repo
 			branch: branch
@@ -643,7 +643,7 @@ module.exports = class Drekmore
 			callbackUrl: "#{config.api.scheme}://:#{config.api.key}@#{config.api.host}/git/#{repo}/done"
 			hostname: nodename.get()
 
-		igthorn.git p, cb
+		igthorn.git req, p, cb
 
 	saveBuild: (buildData, done) =>
 		@getConfig buildData.app, buildData.branch, (err, application) =>

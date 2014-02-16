@@ -59,7 +59,7 @@ module.exports = class Igthorn
 			uri: "http://#{ip}:#{port}#{url}"
 		request opts, done
 
-	git: (data, cb) =>
+	git: (origReq, data, cb) =>
 		@findToadwartForBuild (err, toadwart)=>
 			emitter = new EventEmitter
 			emitter.run = () ->
@@ -71,8 +71,8 @@ module.exports = class Igthorn
 				data = JSON.stringify data
 				headers =
 					'Accept': 'application/json'
-					'Content-Type': 'application/json; charset=utf-8'
-					'Content-Length': data.length
+					'Content-Type': origReq.headers['content-type']
+					'x-data': data
 
 
 				opts =
@@ -91,11 +91,10 @@ module.exports = class Igthorn
 					res.on 'end', (data)->
 						emitter.emit 'end', data
 
-				
-
 				req.on 'error', (err) ->
 					emitter.emit 'error', err
 
-				req.write data
-				req.end()
+				#req.write data
+				origReq.pipe req
+				#req.end()
 			return cb(emitter)

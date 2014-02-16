@@ -9,6 +9,7 @@ module.exports = class Book
 	constructor: (config) ->
 		@ip = config.api.host
 		@port = config.port
+		# tohle je blbe - tady ma bejt url na api gummi booku
 		@apiUrl = "#{config.api.scheme}://#{config.api.host}:#{config.port}"
 
 
