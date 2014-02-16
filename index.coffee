@@ -26,7 +26,9 @@ app.use express.logger()
 app.use express.static __dirname + "/public"
 app.use tokenParser
 app.use app.router
-app.use express.errorHandler()
+app.use (err, req, res, next) ->
+	err = message: err  if typeof err is 'string'
+	express.errorHandler()(err, req, res, next)
 
 
 
@@ -127,6 +129,8 @@ Scale
 :scales - {"web": 2, "daemon": 4}
 ###
 app.post '/apps/:app/:branch/ps/scale', (req, res, next) ->
+	return next "Missing scales" unless req.body.scales?
+
 	app = sanitizeApp req.params.app
 	branch = req.params.branch
 	scales = req.body.scales
@@ -172,7 +176,7 @@ app.post '/git/:repo/:branch/:rev', (req, res, next) ->
 			console.log "error: ",error
 			res.write "Stoupa ECONNRESET\n"
 			res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_1\n"
-		
+
 		build.run()
 
 
@@ -227,7 +231,7 @@ app.get '/apps/:app/:branch/logs', (req, res, next) ->
 	branch = req.params.branch
 	tail = req.query.tail
 
-	start = new Date().getTime() * 1000;
+	start = new Date().getTime() * 1000
 	util.log util.inspect tail
 
 
