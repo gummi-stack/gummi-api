@@ -2,6 +2,7 @@
 colors        = require 'colors'
 express       = require 'express'
 util          = require 'util'
+url           = require 'url'
 
 GLOBAL.config = process.config
 config        = process.config
@@ -13,6 +14,8 @@ require 'coffee-trace'
 dm = new Drekmore(config)
 book = new Book(config)
 
+logstashUrl = url.parse config.logstash
+logs = require('./lib/logs') config.elasticsearch
 
 app = express()
 app.use (req, res, next)->
@@ -224,9 +227,10 @@ Get application logs
 
 :app - application name
 :branch - branch name
-:tail - bool - enable live tailing
+:worker - worker
 ###
-app.get '/apps/:app/:branch/logs', (req, res, next) ->
+app.get '/apps/:app/:branch/:worker/logs', (req, res, next) ->
+	###
 	app = sanitizeApp req.params.app
 	branch = req.params.branch
 	tail = req.query.tail
@@ -237,7 +241,73 @@ app.get '/apps/:app/:branch/logs', (req, res, next) ->
 
 	# TODO test only
 	book.getLogs app, branch, res
+	###
+	options =
+		app: req.params.app
+		worker: req.params.worker
+		lines: req.query.n || 100
 
+	logs options, (err, data) ->
+		return next err if err
+		result = data.map format
+		res.end result.join('')
+
+###
+#Get application logs tail
+
+:app - application name
+:branch - branch name
+:worker - worker
+###
+app.get '/apps/:app/:branch/:worker/tail', (req, res) ->
+	app = req.params.app
+	worker = req.params.worker
+	util.log "Tail request start"
+
+	interval = setInterval () ->
+		# Send some data for keeping socket alive
+		res.write new Buffer [0x00]
+	, 30000
+
+	res.on 'close', () ->
+		clearInterval interval
+
+	connected = no
+	client = new net.Socket()
+	client.connect logstashUrl.port, logstashUrl.hostname, ->
+		connected = yes
+
+		filter =
+			filter:
+				gummi_app: app
+				gummi_worker: worker
+		client.write JSON.stringify filter
+
+	client.on 'data', (data) ->
+		try
+			msg = JSON.parse data
+			res.write format msg
+		catch err
+			util.log 'Invalid data: ' + data
+
+	client.on 'end', ->
+		res.end()
+
+	client.on 'error', (err) ->
+		util.log util.inspect err
+		res.end()
+
+	req.on 'close', ->
+		util.log "Tail request close"
+		client.end() if connected
+
+	req.on 'error', (err) ->
+		util.log util.inspect err
+		client.end() if connected
+
+
+format = (msg) ->
+	"#{msg['@timestamp']} #{msg['gummi_source'] || 'app'}[#{msg['gummi_worker']}]: #{msg['message']}\n"
 
 app.listen config.port
 util.log "server listening on #{config.port}"

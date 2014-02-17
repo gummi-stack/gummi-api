@@ -15,7 +15,8 @@
     "callsite": "*",
     "request": "~2.33.0",
     "cson-config": "~0.1.7",
-    "coffee-trace": "~1.4.0"
+    "coffee-trace": "~1.4.0",
+    "url": "~0.7.9"
   },
   "license": "BSD"
 }

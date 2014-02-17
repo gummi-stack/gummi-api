@@ -1,6 +1,8 @@
 port: 9001
-mongoUrl: "mongodb://192.168.13.7/gummi?auto_reconnect=true&safe=true;"
+mongoUrl: 'mongodb://mongo1.dev1.nag.ccl:27018,mongo2.dev1.nag.ccl:27018,mongo3.dev1.nag.ccl:27018/gummi?auto_reconnect=true&safe=true&replicaSet=dev1'
 api:
 	scheme: "http"
 	host: "192.168.13.7"
 	key: "cM7I84LFT9s29u0tnxrvZaMze677ZE60"
+logstash: "tcp://node2.lxc.nag.ccl:4444"
+elasticsearch: "http://node2.lxc.nag.ccl:9200"
