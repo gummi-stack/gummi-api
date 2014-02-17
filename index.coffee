@@ -282,13 +282,16 @@ app.get '/apps/:app/:branch/:worker/tail', (req, res) ->
 			filter:
 				gummi_app: app
 				gummi_worker: worker
+		console.log filter
 		client.write JSON.stringify filter
 
 	#TODO: json stream parse
 	client.on 'data', (data) ->
 		try
+			console.log data.toString()
 			msg = JSON.parse data.toString()
 			res.write format msg
+			console.log msg
 		catch err
 			util.log 'Invalid data: ' + data
 
