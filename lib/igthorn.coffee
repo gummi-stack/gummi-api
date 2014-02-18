@@ -49,7 +49,7 @@ module.exports = class Igthorn
 			port = toadwart.port
 			@request 'POST', ip, port, '/ps/kill', data, done
 
-	findToadwartForBuild: (done)=>
+	findToadwartForBuild: (done) =>
 		@findToadwartById "8d9cb33c-d62d-43ea-b5c4-7f83edfe4969", done
 
 	request: (method, ip, port, url, data = "", done) ->
@@ -60,9 +60,9 @@ module.exports = class Igthorn
 		request opts, done
 
 	git: (origReq, data, cb) =>
-		@findToadwartForBuild (err, toadwart)=>
-			console.log arguments
+		@findToadwartForBuild (err, toadwart) =>
 			return cb err if err
+			console.log arguments
 			emitter = new EventEmitter
 			emitter.run = () ->
 				method = 'POST'
@@ -99,4 +99,4 @@ module.exports = class Igthorn
 				#req.write data
 				origReq.pipe req
 				#req.end()
-			return cb(emitter)
+			return cb null, emitter
