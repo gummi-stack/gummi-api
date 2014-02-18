@@ -172,7 +172,8 @@ app.post '/git/:repo/:branch/:rev', (req, res, next) ->
 	dm.buildStream req, p.repo, p.branch, p.rev, (err, build)->
 		if err
 			console.log err
-			res.write "Sorry, there is no Todie online, please try it again later...\n"
+			res.write "       Sorry, there is no Todie to serve, please try it again later...".yellow
+			res.write "\n"
 			res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_404\n"
 			return
 
