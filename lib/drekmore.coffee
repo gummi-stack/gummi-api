@@ -18,6 +18,8 @@ logMessage = (message, level)->
 	util.log message
 
 db = mongoq config.mongoUrl
+db.on 'error', (err) ->
+ console.log 'mongo', err
 
 igthorn = new Igthorn process.config, db #todo
 nginx = new Nginx
@@ -45,7 +47,7 @@ class ToadwartPool
 		db.collection('toadwarts').find().toArray (err, toadwarts) =>
 			return done err if err
 			return done(null,toadwarts) unless checkStatus
-			
+
 			async.each toadwarts,(t,next)->
 				igthorn.status t.ip, t.port, (err, status)->
 					if err
@@ -686,7 +688,7 @@ module.exports = class Drekmore
 
 	unRegisterToadwart: (id,cb)=>
 		@db.collection('toadwarts').remove {id: id}, cb
-			
+
 
 	registerDatacenter: (name, regions, done)=>
 		@db.collection("datacenters").find
