@@ -31,7 +31,7 @@ module.exports = class Igthorn
 	findToadwartById: (id, done) =>
 		@db.collection('toadwarts').findOne id: id, (err, toadwart) ->
 			return done err if err
-			return done "Toadwart not found" unless request
+			return done "Toadwart not found" unless toadwart
 			done null, toadwart
 
 	softKill: (data, done) ->
@@ -61,6 +61,7 @@ module.exports = class Igthorn
 
 	git: (origReq, data, cb) =>
 		@findToadwartForBuild (err, toadwart)=>
+			console.log arguments
 			return cb err if err
 			emitter = new EventEmitter
 			emitter.run = () ->

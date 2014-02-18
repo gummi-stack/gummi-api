@@ -169,7 +169,12 @@ Private! githook only
 app.post '/git/:repo/:branch/:rev', (req, res, next) ->
 #app.get '/git/:repo/:branch/:rev', (req, res, next) ->
 	p = req.params
-	dm.buildStream req, p.repo, p.branch, p.rev, (build)->
+	dm.buildStream req, p.repo, p.branch, p.rev, (err, build)->
+		if err
+			console.log err
+			res.write "Sorry, there is no Todie online, please try it again later...\n"
+			res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_404\n"
+			return
 
 		build.on 'data', (data) ->
 			res.write data
