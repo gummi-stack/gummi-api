@@ -33,7 +33,7 @@ module.exports = class Igthorn
 			id: id
 		.toArray (err, results) =>
 			done err, results[0]
-
+		## TODO find one
 	softKill: (data, done) ->
 		util.log "Volam stop: "
 		# util.log util.inspect data
@@ -45,6 +45,7 @@ module.exports = class Igthorn
 
 		@findToadwartById data.toadwartId, (err, toadwart) =>
 			return done(err) if err
+			return done "Toadwart not found" unless toadwart
 			ip = toadwart.ip
 			port = toadwart.port
 			@request 'POST', ip, port, '/ps/kill', data, done
