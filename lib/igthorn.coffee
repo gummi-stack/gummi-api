@@ -61,6 +61,7 @@ module.exports = class Igthorn
 
 	git: (origReq, data, cb) =>
 		@findToadwartForBuild (err, toadwart)=>
+			return cb err if err
 			emitter = new EventEmitter
 			emitter.run = () ->
 				method = 'POST'
