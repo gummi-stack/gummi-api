@@ -201,6 +201,7 @@ app.get '/toadwart/register/:ip/:port', (req, res, next) ->
 	dm.registerToadwart p.ip, p.port, (err, done) ->
 		return next err if err
 		res.json done
+
 app.get '/toadwart/unregister/:id', (req, res, next)->
 	dm.unRegisterToadwart req.params.id, (err, done)->
 		return next err if err
@@ -231,6 +232,7 @@ app.get '/apps/', (req, res, next) ->
 
 ###
 Get application logs
+TODO: branch
 
 :app - application name
 :branch - branch name
@@ -261,6 +263,7 @@ app.get '/apps/:app/:branch/:worker/logs', (req, res, next) ->
 
 ###
 #Get application logs tail
+#TODO: branch
 
 :app - application name
 :branch - branch name
@@ -312,6 +315,21 @@ app.get '/apps/:app/:branch/:worker/tail', (req, res) ->
 	req.on 'error', (err) ->
 		util.log util.inspect err
 		client.end() if connected
+
+###
+#Get application release log
+
+:app - application name
+###
+app.get '/apps/:app/:branch/releases/:release?', (req, res) ->
+	app = sanitizeApp req.params.app
+	branch = req.params.branch
+	release = req.params.release
+
+	dm.getReleases app, branch, release, (err, releases) ->
+		return next err if err
+
+		res.json releases
 
 
 format = (msg) ->

@@ -14,8 +14,9 @@ Nginx			= require './nginx'
 Book			= require './book'
 
 
-logMessage = (message, level)->
-	util.log message
+logMessage = (message, level, display)->
+	display ?= true
+	util.log message if display
 
 db = mongoq config.mongoUrl
 db.on 'error', (err) ->
@@ -29,15 +30,25 @@ book = new Book process.config #todo
 class ToadwartPool
 	constructor: ()->
 		@toadwarts = []
+		@notifications = {}
 
 	getPs: (done) ->
 		db.collection('toadwarts').find().toArray (err, toadwarts) =>
 			return done err if err
 
-			toadwarts.forEach (toadwart)->
-				igthorn.status toadwart.ip, toadwart.port, (err, status) ->
+			toadwarts.forEach (toadwart) =>
+				igthorn.status toadwart.ip, toadwart.port, (err, status) =>
 					if err
-						return logMessage "Stoupa #{toadwart.id} #{toadwart.name} asi down. #{err}"
+						msg = "Stoupa #{toadwart.id} #{toadwart.name} asi down. #{err}"
+
+						# don't spam same notification again and again
+						@notifications[toadwart.id] ?= {}
+						if @notifications[toadwart.id][msg] then display = no else display = yes
+						@notifications[toadwart.id][msg] = yes
+
+						return logMessage msg, null, display
+
+					delete @notifications[toadwart.id]
 
 					done null, status
 
@@ -152,6 +163,7 @@ module.exports = class Drekmore
 
 				done null, apps
 
+
 	getConfig: (app, branch, done) =>
 		@db.collection('apps').find(name: app).toArray (err, results) =>
 			return done err if err
@@ -172,6 +184,7 @@ module.exports = class Drekmore
 
 			done null, application
 
+
 	setScaling: (app, branch, scales, done) =>
 		@getConfig app, branch, (err, application) =>
 			return done err if err
@@ -184,6 +197,7 @@ module.exports = class Drekmore
 			@db.collection('apps').save application, () =>
 				# @scale app, branch, binfo.scale, done
 				@ensureInstances app, branch, done
+
 
 	restart: (app, branch, done) =>
 		@getConfig app, branch, (err, application) =>
@@ -289,9 +303,10 @@ module.exports = class Drekmore
 					async.parallel
 						started: (cb) =>
 
-							util.log util.inspect toStart
-							console.log '>>>>>>>>>>>>>>>>>>>>>>>'
 							if toStart.length
+								util.log util.inspect toStart
+								console.log '>>>>>>>>>>>>>>>>>>>>>>>'
+
 								datacenter = binfo.datacenter
 								unless datacenter
 									return cb null, []
@@ -305,11 +320,11 @@ module.exports = class Drekmore
 							else
 								cb null, {}
 						stopped: (cb) =>
-							console.log '>>>KIKIKIKI>>>>>>>>>>>>>>>>>>>>'
-							util.log util.inspect toKill
-							console.log '>>>KIKIKIKI>>>>>>>>>>>>>>>>>>>>'
-
 							if toKill.length
+								console.log '>>>KIKIKIKI>>>>>>>>>>>>>>>>>>>>'
+								util.log util.inspect toKill
+								console.log '>>>KIKIKIKI>>>>>>>>>>>>>>>>>>>>'
+
 								@stopInstances toKill, (done) =>
 									# util.log util.inspect done
 									cb null, done
@@ -608,6 +623,7 @@ module.exports = class Drekmore
 		), (err) ->
 			done err, instances
 
+
 	updateRouting: (app, branch, done) =>
 		#TODO ocheckovat zda nove procesy bezi
 		#
@@ -637,7 +653,7 @@ module.exports = class Drekmore
 					done o
 
 
-	buildStream: (req, repo, branch, rev, cb) =>
+	buildStream: (req, repo, branch, rev, done) =>
 		p =
 			repo: repo
 			branch: branch
@@ -645,7 +661,8 @@ module.exports = class Drekmore
 			callbackUrl: "#{config.api.scheme}://:#{config.api.key}@#{config.api.host}/git/#{repo}/done"
 			hostname: nodename.get()
 
-		igthorn.git req, p, cb
+		igthorn.git req, p, done
+
 
 	saveBuild: (buildData, done) =>
 		@getConfig buildData.app, buildData.branch, (err, application) =>
@@ -660,6 +677,7 @@ module.exports = class Drekmore
 				@db.collection('apps').save application, () =>
 					done
 						version: binfo.lastVersion
+
 
 	registerToadwart: (ip, port, done) =>
 		request.get "http://#{ip}:#{port}/ps/status", (error, response, body) =>
@@ -686,8 +704,9 @@ module.exports = class Drekmore
 				@db.collection('toadwarts').save data, (err) ->
 					done null, data
 
-	unRegisterToadwart: (id,cb)=>
-		@db.collection('toadwarts').remove {id: id}, cb
+
+	unRegisterToadwart: (id, done) =>
+		@db.collection('toadwarts').remove {id: id}, done
 
 
 	registerDatacenter: (name, regions, done)=>
@@ -702,4 +721,22 @@ module.exports = class Drekmore
 			data.regions = regions
 			@db.collection('datacenters').save data, (err)->
 				done err, data
+
+
+	getReleases: (app, branch, release, done) =>
+		q =
+			app: app
+			branch: branch
+
+		q.rev = release if release
+
+		@db.collection('builds').find(q).limit(10)
+		.toArray (err, builds) ->
+			return done err if err
+
+			done null, builds
+
+
+
+
 
