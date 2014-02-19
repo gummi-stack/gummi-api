@@ -730,7 +730,7 @@ module.exports = class Drekmore
 
 		q.rev = release if release
 
-		@db.collection('builds').find(q).limit(10)
+		@db.collection('builds').find(q).sort(version: -1).limit(10)
 		.toArray (err, builds) ->
 			return done err if err
 
