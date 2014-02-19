@@ -443,6 +443,7 @@ module.exports = class Drekmore
 
 				@findLatestBuild app, branch, (err, build) =>
 					return done err if err
+					return done 'Missing build' unless build?
 
 					# todo co kdyz neni build
 					util.log app, branch
@@ -556,6 +557,7 @@ module.exports = class Drekmore
 
 
 	startProcesses: (build, processes, rendezvous, done) =>
+		return done 'Missing build' unless build?
 		# util.log util.inspect build
 
 		instances = []
