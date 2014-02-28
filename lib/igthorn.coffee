@@ -31,7 +31,15 @@ module.exports = class Igthorn
 
 
 	status: (ip, port, done) ->
-		@request 'GET', ip, port, '/ps/status', "", done
+		@request 'GET', ip, port, '/ps/status', "", (err, res, body) ->
+			return done err if err
+
+			try
+				body = JSON.parse body
+			catch err
+				return done err.message
+
+			done null, body
 
 
 	findToadwartById: (id, done) =>
