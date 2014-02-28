@@ -12,7 +12,7 @@ nodename		= require './nodename'
 Igthorn 		= require './igthorn'
 Nginx			= require './nginx'
 Book			= require './book'
-
+debug = require('debug') 'drekmore'
 
 logMessage = (message, level, display)->
 	display ?= true
@@ -20,7 +20,7 @@ logMessage = (message, level, display)->
 
 db = mongoq config.mongoUrl
 db.on 'error', (err) ->
- console.log 'mongo', err
+	console.log 'mongo', err
 
 igthorn = new Igthorn process.config, db #todo
 nginx = new Nginx
@@ -32,21 +32,35 @@ class ToadwartPool
 		@toadwarts = []
 		@notifications = {}
 
+	updateToadwartOnlineStatus: (id, online, done) ->
+		db.collection('toadwarts').update {id}, $set: {online}, done
+
+
 	getPs: (done) ->
 		db.collection('toadwarts').find().toArray (err, toadwarts) =>
 			return done err if err
 
 			toadwarts.forEach (toadwart) =>
 				igthorn.status toadwart.ip, toadwart.port, (err, status) =>
+					console.log "Invalid toadward ", toadwart unless toadwart.id
+
 					if err
-						msg = "Stoupa #{toadwart.id} #{toadwart.name} asi down. #{err}"
+						if toadwart.online
+							console.log "Stoupa #{toadwart.id} #{toadwart.name} asi down. #{err}".red
 
-						# don't spam same notification again and again
-						@notifications[toadwart.id] ?= {}
-						if @notifications[toadwart.id][msg] then display = no else display = yes
-						@notifications[toadwart.id][msg] = yes
+						if not toadwart.online? or toadwart.online
+							@updateToadwartOnlineStatus toadwart.id, no, (err) ->
+								console.log err if err
 
-						return logMessage msg, null, display
+						return
+
+
+					unless toadwart.online
+						console.log "Stoupa #{toadwart.id} #{toadwart.name} up.".green
+
+					if not toadwart.online? or not toadwart.online
+						@updateToadwartOnlineStatus toadwart.id, yes, (err) ->
+							console.log err if err
 
 					delete @notifications[toadwart.id]
 
@@ -165,10 +179,11 @@ module.exports = class Drekmore
 
 
 	getConfig: (app, branch, done) =>
-		@db.collection('apps').find(name: app).toArray (err, results) =>
+		@db.collection('apps').findOne name: app, (err, application) =>
+
+			# console.log 'zmonomdomsodmsd', arguments
 			return done err if err
 
-			[application] = results
 
 			# create new app
 			application = name: app unless application
@@ -342,21 +357,21 @@ module.exports = class Drekmore
 
 
 	assignProcessesByInstancesToToadwarts: (datacenter, processes, instances, done) ->
-		@db.collection('datacenters').find
-			name: datacenter
-		.toArray (err, results) =>
+		@db.collection('datacenters').findOne name: datacenter, (err, dc) =>
 			return done err if err
+			return done "Datacenter #{datacenter} not found" unless dc
 
-			[dc] = results
 
 			@db.collection('toadwarts').find
 				region:
 					"$in": dc.regions
-				state: "running"
+				online: yes
 			.toArray (err, toadwarts) =>
 				return done err if err
+				return done "No toadie in datacenter:#{datacenter} found" unless toadwarts
 
-				util.log util.inspect toadwarts
+				# console.log 'fjwiejfijfiojweoifjewiofjweoifjweiofjweiofjweoifjweio'
+				# util.log util.inspect toadwarts
 				map = {}
 				for toadie in toadwarts
 					map[toadie.region] ?=
@@ -375,10 +390,10 @@ module.exports = class Drekmore
 
 				updateMap = () ->
 					for regionName, regionData of map
-						 # util.log regionData.instanceCount
-						 regionData.instanceCount = 0
-						 for toadieId, toadie of regionData.toadwarts
-							 regionData.instanceCount += toadie.instanceCount
+						# util.log regionData.instanceCount
+						regionData.instanceCount = 0
+						for toadieId, toadie of regionData.toadwarts
+							regionData.instanceCount += toadie.instanceCount
 
 
 				getFreeRegion = () ->
@@ -394,7 +409,9 @@ module.exports = class Drekmore
 				getFreetoadwartFromRegion = (region) ->
 					lastInstanceCount = 999999 # todo
 					selectedToadwart = null
-
+					console.log '000000000d-d-d-d--dd-d-', map
+					unless map[region]
+						return null
 					for id, toadie of map[region].toadwarts
 						if lastInstanceCount > toadie.instanceCount
 							selectedToadwart = toadie
@@ -405,25 +422,19 @@ module.exports = class Drekmore
 				for process in processes
 					updateMap()
 					region = getFreeRegion()
+					unless region
+						return done "No free region"
+
 					toadwart = getFreetoadwartFromRegion region
+					unless toadwart
+						return done "No online toadie in #{region}"
+
 					toadwart.instanceCount++
-					process.toadwartId = toadwart.id
+					process?.toadwartIp = toadwart.ip
+					process?.toadwartId = toadwart.id
 
 				updateMap()
 
-
-
-					 # util.log regionData.instanceCount
-
-
-				# util.log '-----------------------------------------------------------------------------'
-				# util.log util.inspect map
-				# util.log '-----------------------------------------------------------------------------'
-				# # util.log util.inspect region
-				# # util.log util.inspect toadwart
-				# util.log util.inspect processes
-				# util.log '-----------------------------------------------------------------------------'
-				# throw new Error 'xxx'
 
 				done null, processes
 
@@ -443,7 +454,8 @@ module.exports = class Drekmore
 
 				@findLatestBuild app, branch, (err, build) =>
 					return done err if err
-					return done 'Missing build' unless build?
+
+					return done 'Missing build' unless build
 
 					# todo co kdyz neni build
 					util.log app, branch
@@ -456,20 +468,32 @@ module.exports = class Drekmore
 						userEnv: userEnv
 					processes = [process]
 					process.env ?= {}
-					process.env.PATH = build.releaseData.config_vars.PATH
-
-					datacenter = application.branches[branch].datacenter
-
-					@assignProcessesByInstancesToToadwarts datacenter, processes, instances, (err, processes) =>
+					console.log build
+					# process.env.PATH = build.releaseData.config_vars.PATH
+					console.log application
+					# datacenter = application.branches[branch].datacenter
+					@getConfig app, branch, (err, config) =>
 						return done err if err
-
-						@startProcesses build, processes, yes, (err, results) ->
+						console.log 'xxzxxeqweweqwe', config
+						datacenter = config.branches[branch].datacenter
+						# console.log 'xxxxxxx', datacenter
+						@assignProcessesByInstancesToToadwarts datacenter, processes, instances, (err, processes) =>
 							return done err if err
-
-							[result] = results
-							# process.result = result.dynoData.rendezvousURI
-							# util.log util.inspect process
-							done null, rendezvousURI: result.dynoData.rendezvousURI
+							console.log "PRORORORORORORROROROROROROROROROOR", processes
+							# console.log arguments
+							# console.log "D@# {E#@$@#$@#$@#}"
+							# console.log build
+							@startProcesses build, processes, yes, (err, processes) ->
+								return done err if err
+								console.log '-213-123-12-312-33-2-3-'.red, processes
+								[process] = processes
+								# process.result = result.dynoData.rendezvousURI
+								if process.err
+									return done process.err
+								# util.log util.inspect process
+								rendezvousURI = "tcp://#{process.dynoData.toadwartIp}:#{process.dynoData.port}"
+								console.log rendezvousURI
+								done null, {rendezvousURI}
 
 
 	findInstances: (app, branch, done) ->
@@ -485,20 +509,21 @@ module.exports = class Drekmore
 
 
 	findLatestBuild: (app, branch, done) ->
+		debug "Find build for #{app} #{branch}"
 		@getConfig app, branch, (err, application) =>
 			return done err if err
 
 			binfo = application.branches[branch]
 			# util.log "Last #{app}/#{branch} version #{binfo.lastVersion}"
 			return done() unless binfo.lastVersion
-
+			# console.log 'binfo', binfo
 			@db.collection('builds').find
 				app: app
 				branch: branch
 				version: binfo.lastVersion
 			.toArray (err, results) ->
 				return done err if err
-
+				# console.log arguments
 				[build] = results
 				# util.log "Last #{app}/#{branch} build #{build}"
 				# util.log util.inspect build
@@ -552,8 +577,8 @@ module.exports = class Drekmore
 
 		# TODO je treba cekat na killy ?
 		#TODO routing delat a po smazani vsecho z monga
-		@updateRouting 'testing.git', 'master', ->
-			done('TODO nemam info o tom co sem zastavil')
+		# @updateRouting 'testing.git', 'master', ->
+		# 	done('TODO nemam info o tom co sem zastavil')
 
 
 	startProcesses: (build, processes, rendezvous, done) =>
@@ -564,6 +589,8 @@ module.exports = class Drekmore
 
 
 		async.forEach processes, ((item, done) =>
+			console.log "SSSSSSS"
+			console.log build
 			opts =
 				slug: build.slug
 				cmd: item.cmd
@@ -580,7 +607,7 @@ module.exports = class Drekmore
 
 
 			opts.env ?= {}
-			opts.env.PATH = build.releaseData.config_vars.PATH
+			opts.env.PATH = build.releaseData?.config_vars?.PATH
 
 			# util.log util.inspect opts
 			instance =
@@ -591,38 +618,39 @@ module.exports = class Drekmore
 				time: new Date
 
 			# TODO ziskavat idcka najednou
-			book.getId build.app, build.branch, ':dyno', (err, dynouuid) =>
-				return done err if err
+			# book.getId build.app, build.branch, ':dyno', (err, dynouuid) =>
+			# 	return done err if err
 
-				book.getId build.app, build.branch, opts.worker, (err, wuuid) =>
+			# book.getId build.app, build.branch, opts.worker, (err, wuuid) =>
+			# 	return done err if err
+
+			opts.logUuid = "LOG-uuid"
+			opts.dynoUuid = 'DYNO-ID'
+			# util.log util.inspect opts
+
+			igthorn.start opts, (err, r) =>
+				util.log util.inspect arguments
+				if err
+					instance.state = 'failed'
+					instance.err = err
+				else
+					instance.dynoData = r
+					instance.state = 'running'
+				# util.log util.inspect r
+				# item.result = r
+				# util.log util.inspect build
+
+				@saveInstance instance, (err, results) ->
 					return done err if err
 
-					opts.logUuid = wuuid
-					opts.dynoUuid = dynouuid
-					# util.log util.inspect opts
-
-					igthorn.start opts, (err, r) =>
-						util.log util.inspect arguments
-						if err
-							instance.state = 'failed'
-							instance.err = err
-						else
-							instance.dynoData = r
-							instance.state = 'running'
-						# util.log util.inspect r
-						# item.result = r
-						# util.log util.inspect build
-
-						@saveInstance instance, (err, results) ->
-							return done err if err
-
-							#todo handle error
-							instances.push results[0]
-							util.log instance.state.red
-							done()
+					#todo handle error
+					instances.push results[0]
+					util.log instance.state.red
+					done()
 
 
 		), (err) ->
+			# console.log "----------3333333333333333333"
 			done err, instances
 
 
@@ -660,25 +688,27 @@ module.exports = class Drekmore
 			repo: repo
 			branch: branch
 			rev: rev
-			callbackUrl: "#{config.api.scheme}://:#{config.api.key}@#{config.api.host}/git/#{repo}/done"
+			# callbackUrl: "#{config.api.scheme}://:#{config.api.key}@#{config.api.host}/git/#{repo}/done"
 			hostname: nodename.get()
-
+		console.log "RRRR", repo
 		igthorn.git req, p, done
 
 
 	saveBuild: (buildData, done) =>
 		@getConfig buildData.app, buildData.branch, (err, application) =>
+			console.log "2@@@@@@@@@"
+			console.log arguments
 			return done err if err
 
 			binfo = application.branches[buildData.branch]
-
+			#neni to uplne atomicky....
 			binfo.lastVersion++
 			buildData.version = binfo.lastVersion
-
+			console.log application
 			@db.collection('builds').save buildData, () =>
-				@db.collection('apps').save application, () =>
-					done
-						version: binfo.lastVersion
+				@db.collection('apps').update {name: application.name}, application, upsert: yes, () =>
+					console.log arguments
+					done null, version: binfo.lastVersion
 
 
 	registerToadwart: (ip, port, done) =>

@@ -2,6 +2,7 @@ util = require 'util'
 request = require 'request'
 http = require 'http'
 EventEmitter	= require('events').EventEmitter
+JSONParser = require 'jsonparse'
 
 module.exports = class Igthorn
 	constructor: (config,@db) ->
@@ -10,19 +11,24 @@ module.exports = class Igthorn
 		@apiUrl = "#{config.api.scheme}://#{config.api.host}:#{config.port}"
 
 	start: (data, done) ->
-		util.log "Volam start: #{data.slug}, #{data.cmd} #{data.name} #{data.worker} #{data.toadwartId}"
+		console.log "SSSSSSSSSS@@@@@"
+		return done "Missing toadwart id" unless data.toadwartId
+		util.log "Volam start: #{data.slug.Location}, #{data.cmd} #{data.name} #{data.worker} #{data.toadwartId}"
 		# util.log util.inspect data.userEnv
 		data.env = {} unless data.env
 		data.env.GUMMI = 'BEAR'
 
-		@db.collection('toadwarts').find
-			id: data.toadwartId
-		.toArray (err, toadwarts) =>
+		@db.collection('toadwarts').findOne {id: data.toadwartId}, (err, toadwart) =>
 			return done err if err
+			return done "Toadie #{data.toadwartId} not found" unless toadwart
+			console.log ">>>>>>>>>>>>>> STTTTTO"
+			@request 'POST', toadwart.ip, toadwart.port, '/ps/start', data, (err, res, body) ->
+				body.toadwartIp = toadwart.ip
+				# console.log "RRRRRRR".cyan
+				# console.log err
+				# console.log body
+				done err, body
 
-			[toadwart] = toadwarts
-			util.log util.inspect toadwart
-			@request 'POST', toadwart.ip, toadwart.port, '/ps/start', data, done
 
 	status: (ip, port, done) ->
 		@request 'GET', ip, port, '/ps/status', "", done
@@ -84,13 +90,21 @@ module.exports = class Igthorn
 					method: method
 					headers: headers
 
+
+
 				req = http.request opts, (res) =>
 					res.setEncoding 'utf8'
-					res.on 'error', (err)->
+
+					stream = new JSONParser
+					stream.onValue = (o) ->
+						emitter.emit 'data', o
+
+
+					res.on 'error', (err) ->
 						emitter.emit 'error', err
-					res.on 'data', (data)->
-						emitter.emit 'data', data
-					res.on 'end', (data)->
+					res.on 'data', (data) ->
+						stream.write data
+					res.on 'end', (data) ->
 						emitter.emit 'end', data
 
 				req.on 'error', (err) ->

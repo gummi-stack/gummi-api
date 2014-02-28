@@ -1,3 +1,5 @@
+process.env.DEBUG = 'drekmore'
+
 port: 9001
 mongoUrl: 'mongodb://mongo1.dev1.nag.ccl:27018,mongo2.dev1.nag.ccl:27018,mongo3.dev1.nag.ccl:27018/gummi?auto_reconnect=true&safe=true&replicaSet=dev1'
 api:

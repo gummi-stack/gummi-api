@@ -96,6 +96,8 @@ Start new process
 :branch - branch
 ###
 app.post '/apps/:app/:branch/ps', (req, res, next) ->
+
+	# console.log 'xxxxxxx'
 	app = sanitizeApp req.params.app
 	branch = req.params.branch
 
@@ -149,17 +151,6 @@ app.all '/git/:repo/*', (req, res, next) ->
 	next()
 
 
-###
-Callback url for toadwart on successful build
-Private! toadwart only
-###
-app.post '/git/:repo/done', (req, res, next) ->
-	p = req.params
-	b = req.body
-
-	dm.saveBuild b, (data) ->
-		data.status = 'ok'
-		res.json data
 
 
 ###
@@ -167,7 +158,6 @@ Build revision from git
 Private! githook only
 ###
 app.post '/git/:repo/:branch/:rev', (req, res, next) ->
-#app.get '/git/:repo/:branch/:rev', (req, res, next) ->
 	p = req.params
 	dm.buildStream req, p.repo, p.branch, p.rev, (err, build)->
 		if err
@@ -177,14 +167,35 @@ app.post '/git/:repo/:branch/:rev', (req, res, next) ->
 			res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_404\n"
 			return
 
+		endIsHandled = no
 		build.on 'data', (data) ->
-			res.write data
+			if data.msg
+				res.write data.msg
+			else if data.result
+
+				endIsHandled = yes # prevent failure handler
+				dm.saveBuild data.result, (err, data) ->
+					console.log "------------------------", arguments
+					if err
+						console.log err
+						res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_1\n"
+						return
+
+					res.write "-----> Build stored: v#{data.version}\n"
+					res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_0\n"
+			else if data.exitCode?
+				res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_#{data.exitCode}\n"
+			else
+				console.log "Unknown data from toadwart", data
+
 		build.on 'end', (exitCode) ->
+			return if endIsHandled
 			exitCode = 1 unless exitCode
 			res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_#{exitCode}\n"
+
 		build.on 'error', (error)->
-			console.log "error: ",error
-			res.write "Stoupa ECONNRESET\n"
+			console.log "toadie build error: ",error
+			res.write "       Toadie rejected connection, please try it again later...\n"
 			res.end "94ed473f82c3d1791899c7a732fc8fd0_exit_1\n"
 
 		build.run()

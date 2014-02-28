@@ -16,7 +16,9 @@
     "request": "~2.33.0",
     "cson-config": "~0.1.7",
     "coffee-trace": "~1.4.0",
-    "url": "~0.7.9"
+    "url": "~0.7.9",
+    "debug": "~0.7.4",
+    "jsonstream": "0.0.1"
   },
   "license": "BSD"
 }
