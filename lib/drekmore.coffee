@@ -273,8 +273,11 @@ module.exports = class Drekmore
 
 					unless binfo.state is 'stopped'
 						# pripravim procesy pro sputeni
+						# console.log "pripravim procesy pro sputeni"
+						# console.log scales
+						# console.log build
 						for procType, procCnt of scales
-							data = build.procfile[procType]
+							data = build.procfile?[procType]
 							continue unless data
 							cmd = data.command
 							cmd += " " + data.options.join ' ' if data.options
@@ -350,8 +353,8 @@ module.exports = class Drekmore
 						delete @ensureLock[hash]
 
 						if toStart.length or toKill.length
-							@updateRouting app, branch, () ->
-								return done null, result
+							# @updateRouting app, branch, () ->
+							return done null, result
 						else
 							return done null, result
 
