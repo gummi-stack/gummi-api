@@ -633,9 +633,10 @@ module.exports = class Drekmore
 
 			igthorn.start opts, (err, r) =>
 				util.log util.inspect arguments
-				if err
+				if err or r.error
 					instance.state = 'failed'
 					instance.err = err
+					instance.err ?= r.error
 				else
 					instance.dynoData = r
 					instance.state = 'running'
