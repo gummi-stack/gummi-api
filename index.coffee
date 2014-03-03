@@ -300,8 +300,9 @@ app.get '/apps/:app/:branch/:worker/tail', (req, res) ->
 
 		filter =
 			filter:
-				gummi_app: app
-				gummi_worker: worker
+				app: app
+				worker: worker
+		console.log filter
 		client.write JSON.stringify filter
 
 	#TODO: json stream parse
@@ -344,7 +345,8 @@ app.get '/apps/:app/:branch/releases/:release?', (req, res) ->
 
 
 format = (msg) ->
-	"#{msg['@timestamp']} #{msg['gummi_source'] || 'app'}[#{msg['gummi_worker']}]: #{msg['message']}\n"
+	console.log msg
+	"#{msg['@timestamp']} #{msg['source'] || 'app'}[#{msg['worker']}]: #{msg['message']}\n"
 
 app.listen config.port
 util.log "server listening on #{config.port}"
