@@ -14,10 +14,6 @@ Nginx			= require './nginx'
 Book			= require './book'
 debug = require('debug') 'drekmore'
 
-logMessage = (message, level, display)->
-	display ?= true
-	util.log message if display
-
 db = mongoq config.mongoUrl
 db.on 'error', (err) ->
 	console.log 'mongo', err
@@ -117,7 +113,8 @@ module.exports = class Drekmore
 					if process.uuid is instance.dynoData.uuid
 						process.found = yes
 						return no
-				util.log "Nasel sem padlou instanci".green
+							# console.log instance
+				console.log "Crashed #{instance.app}/#{instance.branch}".red
 				yes
 
 			#bezi tam neco navic ?
@@ -144,8 +141,8 @@ module.exports = class Drekmore
 			for application in applications
 				# util.log util.inspect application
 				for branch, data of application.branches
-					@ensureInstances application.name, branch, () ->
-						# util.log util.inspect arguments
+					@ensureInstances application.name, branch, (err) ->
+						console.log "@ensureInstances", err if err
 
 
 		@tp.getPs (err, status) =>
@@ -245,12 +242,12 @@ module.exports = class Drekmore
 	ensureInstances: (app, branch, done) =>
 		hash = "#{app}/#{branch}"
 		if @ensureLock[hash]
-			console.log "ensure #{app} #{branch}".red
+			# console.log "Zamknuto pro start: #{app} #{branch} retry: #{@ensureLock[hash]}".red
 			return done()
 
-		@ensureLock[hash] = yes
+		@ensureLock[hash] = 1
 
-		console.log "ensure #{app} #{branch}".yellow
+		console.log "Zamykam pro start #{app} #{branch}".yellow
 		@getConfig app, branch, (err, application) =>
 			return done err if err
 
@@ -265,6 +262,7 @@ module.exports = class Drekmore
 
 					# util.log util.inspect instances
 					unless build
+						console.log "Mazu zamek #{hash} 1".gree
 						delete @ensureLock[hash]
 						return done err: "No build found"
 
@@ -322,8 +320,8 @@ module.exports = class Drekmore
 						started: (cb) =>
 
 							if toStart.length
-								util.log util.inspect toStart
-								console.log '>>>>>>>>>>>>>>>>>>>>>>>'
+								# util.log util.inspect toStart
+								# console.log '>>>>>>>>>>>>>>>>>>>>>>>'
 
 								datacenter = binfo.datacenter
 								unless datacenter
@@ -350,6 +348,9 @@ module.exports = class Drekmore
 								cb null, {}
 
 					, (err, result) =>
+						console.log "err1111", err if err
+						console.log "Mazu zamek #{hash} 2".green
+
 						delete @ensureLock[hash]
 
 						if toStart.length or toKill.length
@@ -412,7 +413,7 @@ module.exports = class Drekmore
 				getFreetoadwartFromRegion = (region) ->
 					lastInstanceCount = 999999 # todo
 					selectedToadwart = null
-					console.log '000000000d-d-d-d--dd-d-', map
+					# console.log '000000000d-d-d-d--dd-d-', map
 					unless map[region]
 						return null
 					for id, toadie of map[region].toadwarts
@@ -494,7 +495,7 @@ module.exports = class Drekmore
 								if process.err
 									return done process.err
 								# util.log util.inspect process
-								rendezvousURI = "tcp://#{process.dynoData.toadwartIp}:#{process.dynoData.port}"
+								rendezvousURI = "tcp://#{process.dynoData?.toadwartIp}:#{process.dynoData.port}"
 								console.log rendezvousURI
 								done null, {rendezvousURI}
 
@@ -512,7 +513,7 @@ module.exports = class Drekmore
 
 
 	findLatestBuild: (app, branch, done) ->
-		debug "Find build for #{app} #{branch}"
+		# debug "Find build for #{app} #{branch}"
 		@getConfig app, branch, (err, application) =>
 			return done err if err
 
@@ -535,7 +536,7 @@ module.exports = class Drekmore
 
 	removeInstance: (instance, done) =>
 		q = _id: instance._id
-		console.log 'mazu'
+		# console.log 'mazu'
 		# util.log util.inspect q
 		@db.collection('instances').remove q, done
 
@@ -592,8 +593,8 @@ module.exports = class Drekmore
 
 
 		async.forEach processes, ((item, done) =>
-			console.log "SSSSSSS"
-			console.log build
+			# console.log "SSSSSSS"
+			# console.log build
 			opts =
 				slug: build.slug
 				cmd: item.cmd
@@ -649,7 +650,7 @@ module.exports = class Drekmore
 
 					#todo handle error
 					instances.push results[0]
-					util.log instance.state.red
+					console.log "Changed state #{build.app}/#{build.branch} - #{instance.state}".green
 					done()
 
 
@@ -716,6 +717,7 @@ module.exports = class Drekmore
 
 
 	registerToadwart: (ip, port, done) =>
+		console.log " registering http://#{ip}:#{port}/ps/status"
 		request.get "http://#{ip}:#{port}/ps/status", (error, response, body) =>
 			return done error if error
 

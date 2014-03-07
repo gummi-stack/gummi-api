@@ -11,17 +11,17 @@ module.exports = class Igthorn
 		@apiUrl = "#{config.api.scheme}://#{config.api.host}:#{config.port}"
 
 	start: (data, done) ->
-		console.log "SSSSSSSSSS@@@@@"
 		return done "Missing toadwart id" unless data.toadwartId
-		util.log "Volam start: #{data.slug.Location}, #{data.cmd} #{data.name} #{data.worker} #{data.toadwartId}"
+		#{data.slug.Location},
+		console.log "Volam start: #{data.name} #{data.cmd} #{data.worker} #{data.toadwartId}".cyan
 		# util.log util.inspect data.userEnv
 		data.env = {} unless data.env
 		data.env.GUMMI = 'BEAR'
+		data.env.POUZE_PRO_APLIKACI = 1
 
 		@db.collection('toadwarts').findOne {id: data.toadwartId}, (err, toadwart) =>
 			return done err if err
 			return done "Toadie #{data.toadwartId} not found" unless toadwart
-			console.log ">>>>>>>>>>>>>> STTTTTO"
 			@request 'POST', toadwart.ip, toadwart.port, '/ps/start', data, (err, res, body) ->
 				body.toadwartIp = toadwart.ip
 				# console.log "RRRRRRR".cyan
@@ -50,7 +50,7 @@ module.exports = class Igthorn
 
 	softKill: (data, done) ->
 		util.log "Volam stop: "
-		# util.log util.inspect data
+		util.log util.inspect data
 
 		o =
 			name: data?.name
@@ -64,7 +64,8 @@ module.exports = class Igthorn
 			@request 'POST', ip, port, '/ps/kill', data, done
 
 	findToadwartForBuild: (done) =>
-		@findToadwartById "8d9cb33c-d62d-43ea-b5c4-7f83edfe4969", done
+		@findToadwartById "96fc2126-c350-4745-9ee3-d33c375c67fc", done # toadwart1
+		# @findToadwartById "8d9cb33c-d62d-43ea-b5c4-7f83edfe4969", done # bender mrdka
 
 	request: (method, ip, port, url, data = "", done) ->
 		opts=
